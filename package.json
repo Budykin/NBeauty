@@ -1,5 +1,16 @@
 {
-  "dependencies": {
-    "class-variance-authority": "^0.7.1"
+  "name": "nbeauty",
+  "private": true,
+  "workspaces": [
+    "web-app/frontend",
+    "telegram-mini-app/frontend"
+  ],
+  "scripts": {
+    "dev:web": "npm --prefix web-app/frontend run dev",
+    "dev:mini": "npm --prefix telegram-mini-app/frontend run dev",
+    "build:web": "npm --prefix web-app/frontend run build",
+    "build:mini": "npm --prefix telegram-mini-app/frontend run build",
+    "lint:web": "npm --prefix web-app/frontend run lint",
+    "lint:mini": "npm --prefix telegram-mini-app/frontend run lint"
   }
 }

@@ -8,6 +8,7 @@ import { SalonMembersPanel } from "./salon-members-panel"
 import { SalonResourcesPanel } from "./salon-resources-panel"
 import { SalonScheduleView } from "./salon-schedule-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 
 interface SalonDashboardProps {
   salon: Salon
@@ -39,8 +40,14 @@ export function SalonDashboard({
   }
 
   const handleCopyInvite = async () => {
-    await navigator.clipboard.writeText(`https://t.me/crmbot?start=${salon.inviteCode}`)
+    await navigator.clipboard.writeText(`https://crm-master.app/join/${salon.inviteCode}`)
   }
+
+  const tabs = [
+    { id: "schedule" as const, label: "Расписание", icon: CalendarDays },
+    { id: "members" as const, label: "Мастера", icon: Users },
+    { id: "resources" as const, label: "Ресурсы", icon: Box },
+  ]
 
   return (
     <div className="flex flex-col gap-4 pb-4">
