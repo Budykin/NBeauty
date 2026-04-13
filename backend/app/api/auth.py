@@ -1,77 +1,19 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
-from urllib.parse import parse_qsl
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.auth import validate_telegram_init_data
 from backend.app.schemas.auth import AuthResponse, TelegramInitData
 from common import get_async_session, settings
 from common.models import User, UserRole
 
 
 router = APIRouter()
-
-
-def _check_telegram_auth(init_data: str, bot_token: str) -> Dict[str, Any]:
-    """Проверка подписи initData по алгоритму Telegram.
-
-    Документация: https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
-    """
-
-    # Разбираем query-string формат
-    data_pairs = parse_qsl(init_data, keep_blank_values=True)
-    data: Dict[str, str] = {k: v for k, v in data_pairs}
-
-    hash_from_telegram = data.pop("hash", None)
-    if not hash_from_telegram:
-        raise HTTPException(status_code=400, detail="Missing hash in initData")
-
-    # Строка данных в формате "key=value" по алфавиту ключей
-    data_check_string = "\n".join(
-        f"{k}={v}" for k, v in sorted(data.items(), key=lambda x: x[0])
-    )
-
-    secret_key = hashlib.sha256(bot_token.encode()).digest()
-    hmac_string = hmac.new(
-        secret_key,
-        msg=data_check_string.encode(),
-        digestmod=hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(hmac_string, hash_from_telegram):
-        raise HTTPException(status_code=401, detail="Invalid initData signature")
-
-    # Дополнительно можно проверять срок жизни auth_date
-    auth_date_str = data.get("auth_date")
-    if auth_date_str is not None:
-        try:
-            auth_ts = int(auth_date_str)
-            auth_dt = datetime.fromtimestamp(auth_ts, tz=timezone.utc)
-            if datetime.now(tz=timezone.utc) - auth_dt > timedelta(days=1):
-                raise HTTPException(status_code=401, detail="initData has expired")
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid auth_date")
-
-    # user приходит как JSON-объект в строке
-    user_json = data.get("user")
-    if not user_json:
-        raise HTTPException(status_code=400, detail="Missing user field in initData")
-
-    try:
-        user_data = json.loads(user_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid user JSON in initData")
-
-    return user_data
 
 
 def _create_jwt_token(user: User) -> str:
@@ -98,7 +40,7 @@ async def telegram_auth(
     Фронтенд должен отправлять raw `window.Telegram.WebApp.initData` как `initData`.
     """
 
-    user_data = _check_telegram_auth(body.init_data, settings.bot_token)
+    user_data = validate_telegram_init_data(body.init_data)
 
     tg_id = int(user_data["id"])
     full_name = user_data.get("first_name", "")

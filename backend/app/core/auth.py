@@ -82,3 +82,61 @@ def create_access_token(user: User) -> str:
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token
 
+
+async def get_current_user(
+    authorization: str | None = None,
+) -> User:
+    """Получить текущего пользователя из JWT токена.
+
+    Используется как Depends в FastAPI для защиты роутов.
+    Фронтенд должен передавать заголовок: Authorization: Bearer <token>
+    """
+
+    from fastapi import HTTPException, status
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from common import get_async_session
+    from common.models import User
+
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Отсутствует заголовок Authorization",
+        )
+
+    # Парсим "Bearer <token>"
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный формат Authorization заголовка",
+        )
+
+    # Декодируем JWT
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+        tg_id = int(payload.get("sub"))
+    except (jwt.InvalidTokenError, (ValueError, TypeError)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный или просроченный токен",
+        )
+
+    # Ищем пользователя в БД
+    async with get_async_session().__anext__() as session:
+        result = await session.execute(select(User).where(User.tg_id == tg_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Пользователь не найден",
+            )
+
+        return user
+

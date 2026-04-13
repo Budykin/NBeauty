@@ -8,12 +8,25 @@ yarn.lock
 .env.local
 .env.*.local
 
-# IDE
-.vscode/
-.idea/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
 .venv
 .venv/
-.idea
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+
 *.swp
 *.swo
 *~
@@ -22,8 +35,15 @@ yarn.lock
 # Build output
 dist/
 build/
+.next/
+out/
 *.log
+npm-debug.log*
 
 # OS
 Thumbs.db
 .DS_Store
+
+# Cache
+.cache/
+.eslintcache
