@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 
 from backend.app.core.auth import get_current_user
-from backend.app.schemas.common import MeOut, MeUpdate
+from backend.app.schemas.common import MeOut, MeUpdate, BecomeMasterOut
 from common import get_async_session
-from common.models import User
+from common.models import User, UserRole
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -43,3 +43,64 @@ async def update_me(
     await session.refresh(current_user)
 
     return current_user
+
+
+@router.post("/me/become-master", response_model=BecomeMasterOut)
+async def become_master(
+    authorization: str = Header(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Переключить роль пользователя на мастера.
+
+    После этого пользователь видит интерфейс мастера:
+    - Dashboard с записями
+    - Управление услугами
+    - Настройка расписания
+    - Управление салоном (если есть)
+    """
+
+    current_user = await get_current_user(authorization)
+
+    if current_user.role == UserRole.MASTER:
+        return BecomeMasterOut(
+            role="master",
+            message="Вы уже мастер",
+        )
+
+    current_user.role = UserRole.MASTER
+    session.add(current_user)
+    await session.commit()
+
+    return BecomeMasterOut(
+        role="master",
+        message="Теперь вы мастер! Настройте услуги и расписание.",
+    )
+
+
+@router.post("/me/switch-to-client", response_model=BecomeMasterOut)
+async def switch_to_client(
+    authorization: str = Header(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Переключить роль обратно на клиента.
+
+    Мастер может переключиться в режим клиента,
+    чтобы записаться к другим мастерам.
+    """
+
+    current_user = await get_current_user(authorization)
+
+    if current_user.role == UserRole.CLIENT:
+        return BecomeMasterOut(
+            role="client",
+            message="Вы уже клиент",
+        )
+
+    current_user.role = UserRole.CLIENT
+    session.add(current_user)
+    await session.commit()
+
+    return BecomeMasterOut(
+        role="client",
+        message="Теперь вы в режиме клиента",
+    )
