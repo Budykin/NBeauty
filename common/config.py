@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # WebApp / фронтенд
     webapp_url: str = Field(alias="WEBAPP_URL")
+    frontend_url: str = Field(alias="FRONTEND_URL", default="https://t.me/test_bot")
 
     # CORS
     cors_origins: List[str] = Field(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
@@ -18,6 +19,7 @@ from common.models import (
     Service,
     User,
 )
+from common.notifications import notify_appointment_cancelled
 
 
 router = APIRouter()
@@ -206,6 +208,30 @@ async def cancel_appointment(
     session.add(appointment)
     await session.commit()
     await session.refresh(appointment)
+
+    # Отправляем уведомление мастеру об отмене (в фоне)
+    if appointment.master_id != current_user.tg_id:
+        # Если отменил клиент — уведомляем мастера
+        master_result = await session.execute(
+            select(User).where(User.tg_id == appointment.master_id)
+        )
+        master = master_result.scalar_one_or_none()
+        client_result = await session.execute(
+            select(User).where(User.tg_id == current_user.tg_id)
+        )
+        client = client_result.scalar_one_or_none()
+
+        if master and client and appointment.service:
+            start_str = appointment.start_time.strftime("%d.%m.%Y %H:%M")
+            asyncio.create_task(
+                notify_appointment_cancelled(
+                    master_tg_id=master.tg_id,
+                    client_name=client.full_name,
+                    service_name=appointment.service.name,
+                    date_str=start_str,
+                    start_time=start_str,
+                )
+            )
 
     return AppointmentOut(
         id=appointment.id,

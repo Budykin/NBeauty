@@ -7,6 +7,7 @@ from aiogram.enums import ParseMode
 
 from common.config import settings
 from bot.handlers.start import router as start_router
+from bot.handlers.master import router as master_router
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +28,7 @@ async def main():
 
     # Подключаем наши роутеры
     dp.include_router(start_router)
-    # dp.include_router(master_router) # Сюда будем добавлять новые
+    dp.include_router(master_router)
 
     # Удаляем вебхуки (если были) и запускаем поллинг
     await bot.delete_webhook(drop_pending_updates=True)

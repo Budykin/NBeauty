@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,7 @@ from sqlalchemy import and_, or_
 
 from common.db import get_async_session
 from common.models import Appointment, Service, AppointmentStatus, User
+from common.notifications import notify_appointment_created
 from backend.app.schemas.bookings import BookingCreate, BookingOut
 
 router = APIRouter()
@@ -20,7 +22,6 @@ async def create_booking(
     """Создать новую запись с проверкой доступности времени и кабинета."""
 
     # 1. Находим услугу, чтобы узнать её длительность и нужен ли ей кабинет (resource_id)
-    # Предполагаем, что ID передаются как строки (UUID)
     service_query = select(Service).where(Service.id == payload.service_id)
     service_result = await session.execute(service_query)
     service = service_result.scalar_one_or_none()
@@ -32,7 +33,6 @@ async def create_booking(
     end_time = payload.start_time + timedelta(minutes=service.duration)
 
     # 3. ПРОВЕРКИ КОНФЛИКТОВ
-    # Запись невозможна, если (StartA < EndB) И (EndA > StartB)
     busy_target_filter = Appointment.master_id == payload.master_id
     if service.resource_id is not None:
         busy_target_filter = or_(
@@ -62,15 +62,39 @@ async def create_booking(
         client_id=payload.client_id,
         salon_id=service.salon_id,
         service_id=payload.service_id,
-        resource_id=service.resource_id,  # Автоматически привязываем нужный кабинет
+        resource_id=service.resource_id,
         start_time=payload.start_time,
         end_time=end_time,
-        status=AppointmentStatus.PENDING  # Статус "Ожидает подтверждения"
+        status=AppointmentStatus.PENDING
     )
 
     session.add(new_appointment)
     await session.commit()
     await session.refresh(new_appointment)
+
+    # 5. Отправляем уведомление мастеру (в фоне, не блокируя ответ)
+    master_result = await session.execute(
+        select(User).where(User.tg_id == payload.master_id)
+    )
+    master = master_result.scalar_one_or_none()
+
+    client_result = await session.execute(
+        select(User).where(User.tg_id == payload.client_id)
+    )
+    client = client_result.scalar_one_or_none()
+
+    if master and client:
+        start_str = new_appointment.start_time.strftime("%d.%m.%Y %H:%M")
+        asyncio.create_task(
+            notify_appointment_created(
+                master_tg_id=master.tg_id,
+                client_name=client.full_name,
+                service_name=service.name,
+                date_str=start_str,
+                start_time=start_str,
+                appointment_id=new_appointment.id,
+            )
+        )
 
     return BookingOut(
         id=str(new_appointment.id),
