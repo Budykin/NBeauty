@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
@@ -9,7 +9,6 @@ from sqlalchemy import and_, or_
 from common.db import get_async_session
 from common.models import Appointment, Service, AppointmentStatus, User
 from common.notifications import notify_appointment_created
-from backend.app.core.auth import get_current_user
 from backend.app.schemas.bookings import BookingCreate, BookingOut
 
 router = APIRouter()
@@ -18,22 +17,9 @@ router = APIRouter()
 @router.post("/create", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
 async def create_booking(
         payload: BookingCreate,
-        authorization: str = Header(...),
         session: AsyncSession = Depends(get_async_session)
 ):
-    """Создать новую запись с проверкой доступности времени и кабинета.
-
-    Клиент может записать ТОЛЬКО себя (client_id должен совпадать с текущим пользователем).
-    """
-
-    current_user = await get_current_user(authorization)
-
-    # 0. Проверяем, что клиент записывает только себя
-    if str(current_user.tg_id) != payload.client_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Вы можете записать только себя",
-        )
+    """Создать новую запись с проверкой доступности времени и кабинета."""
 
     # 1. Находим услугу, чтобы узнать её длительность и нужен ли ей кабинет (resource_id)
     service_query = select(Service).where(Service.id == payload.service_id)

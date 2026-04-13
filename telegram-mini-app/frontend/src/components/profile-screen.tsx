@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Clock, Settings, ChevronRight, ArrowLeftRight, Building2, Users, Crown } from "lucide-react"
+import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import type { Role, Salon } from "@/lib/types"
 
@@ -10,6 +10,7 @@ interface ProfileScreenProps {
   salons: Salon[]
   currentMasterId: string
   onToggleRole: () => void
+  onBecomeMaster: () => void
   onNavigate: (screen: "working-hours" | "salon-dashboard") => void
   onSelectSalon: (salon: Salon) => void
 }
@@ -19,6 +20,7 @@ export function ProfileScreen({
   salons,
   currentMasterId,
   onToggleRole,
+  onBecomeMaster,
   onNavigate,
   onSelectSalon,
 }: ProfileScreenProps) {
@@ -48,26 +50,55 @@ export function ProfileScreen({
         </div>
       </motion.div>
 
-      {/* Переключатель ролей */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="rounded-xl border border-primary/20 bg-accent p-4"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <ArrowLeftRight className="h-4 w-4 text-primary" />
+      {/* Переключатель ролей (для мастера) */}
+      {isMaster && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-xl border border-primary/20 bg-accent p-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <ArrowLeftRight className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Режим клиента</p>
+                <p className="text-xs text-muted-foreground">Записаться к мастеру</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">Режим мастера</p>
-              <p className="text-xs text-muted-foreground">Переключитесь между ролями</p>
-            </div>
+            <Switch checked={isMaster} onCheckedChange={onToggleRole} />
           </div>
-          <Switch checked={isMaster} onCheckedChange={onToggleRole} />
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
+
+      {/* Кнопка "Стать мастером" (для клиента) */}
+      {!isMaster && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <button
+            onClick={onBecomeMaster}
+            className="group flex w-full items-center justify-between rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5 p-4 transition-all active:scale-[0.98] hover:border-primary/50 hover:from-primary/15 hover:to-primary/10"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold text-foreground">Стать мастером</p>
+                <p className="text-xs text-muted-foreground">
+                  Добавляйте услуги, принимайте записи
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-primary" />
+          </button>
+        </motion.div>
+      )}
 
       {/* Мои салоны */}
       {isMaster && mySalons.length > 0 && (

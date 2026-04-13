@@ -64,6 +64,12 @@ export default function TelegramCRM() {
     })
   }, [])
 
+  const handleBecomeMaster = useCallback(() => {
+    setRole("master")
+    setScreen("dashboard")
+    setSelectedSalon(null)
+  }, [])
+
   const handleAddAppointment = useCallback((apt: Appointment) => {
     setAppointments((prev) => [...prev, apt])
   }, [])
@@ -249,6 +255,7 @@ export default function TelegramCRM() {
                 salons={salons}
                 currentMasterId={CURRENT_MASTER_ID}
                 onToggleRole={handleToggleRole}
+                onBecomeMaster={handleBecomeMaster}
                 onNavigate={(s) => setScreen(s)}
                 onSelectSalon={handleSelectSalon}
               />
