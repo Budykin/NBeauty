@@ -31,7 +31,8 @@ const pageVariants = {
 const CURRENT_MASTER_ID = "m1" // Текущий пользователь-мастер
 
 export default function TelegramCRM() {
-  const [role, setRole] = useState<Role>("master")
+  const [role, setRole] = useState<Role>("client")       // Статус из БД (client/master)
+  const [viewMode, setViewMode] = useState<Role>("client")  // Режим просмотра
   const [screen, setScreen] = useState<Screen>("dashboard")
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS)
   const [services, setServices] = useState<Service[]>(MOCK_SERVICES)
@@ -56,7 +57,7 @@ export default function TelegramCRM() {
   }, [])
 
   const handleToggleRole = useCallback(() => {
-    setRole((prev) => {
+    setViewMode((prev) => {
       const next = prev === "master" ? "client" : "master"
       setScreen(next === "master" ? "dashboard" : "discovery")
       setSelectedSalon(null)
@@ -65,7 +66,9 @@ export default function TelegramCRM() {
   }, [])
 
   const handleBecomeMaster = useCallback(() => {
+    // TODO: POST /api/me/become-master → обновить роль в БД
     setRole("master")
+    setViewMode("master")
     setScreen("dashboard")
     setSelectedSalon(null)
   }, [])
@@ -166,8 +169,8 @@ export default function TelegramCRM() {
       {/* Контент */}
       <main className="flex-1 overflow-y-auto pb-20">
         <AnimatePresence mode="wait">
-          {/* === МАСТЕР === */}
-          {role === "master" && screen === "dashboard" && (
+          {/* === МАСТЕР (viewMode) === */}
+          {viewMode === "master" && screen === "dashboard" && (
             <motion.div key="master-dash" {...pageVariants} transition={{ duration: 0.2 }}>
               <MasterDashboard
                 appointments={masterAppointments}
@@ -182,7 +185,7 @@ export default function TelegramCRM() {
             </motion.div>
           )}
 
-          {role === "master" && screen === "service-management" && (
+          {viewMode === "master" && screen === "service-management" && (
             <motion.div key="master-services" {...pageVariants} transition={{ duration: 0.2 }}>
               <ServiceManagement
                 services={services}
@@ -192,7 +195,7 @@ export default function TelegramCRM() {
             </motion.div>
           )}
 
-          {role === "master" && screen === "working-hours" && (
+          {viewMode === "master" && screen === "working-hours" && (
             <motion.div key="master-hours" {...pageVariants} transition={{ duration: 0.2 }}>
               <WorkingHoursScreen
                 hours={workingHours}
@@ -202,7 +205,7 @@ export default function TelegramCRM() {
             </motion.div>
           )}
 
-          {role === "master" && screen === "salon-dashboard" && selectedSalon && (
+          {viewMode === "master" && screen === "salon-dashboard" && selectedSalon && (
             <motion.div key="salon-dash" {...pageVariants} transition={{ duration: 0.2 }}>
               <SalonDashboard
                 salon={selectedSalon}
@@ -218,14 +221,14 @@ export default function TelegramCRM() {
             </motion.div>
           )}
 
-          {/* === КЛИЕНТ === */}
-          {role === "client" && screen === "discovery" && (
+          {/* === КЛИЕНТ (viewMode) === */}
+          {viewMode === "client" && screen === "discovery" && (
             <motion.div key="client-disc" {...pageVariants} transition={{ duration: 0.2 }}>
               <DiscoveryScreen masters={MOCK_MASTERS} onSelectMaster={handleSelectMaster} />
             </motion.div>
           )}
 
-          {role === "client" && screen === "booking-wizard" && selectedMaster && (
+          {viewMode === "client" && screen === "booking-wizard" && selectedMaster && (
             <motion.div key="client-wizard" {...pageVariants} transition={{ duration: 0.2 }}>
               <BookingWizard
                 master={selectedMaster}
@@ -238,7 +241,7 @@ export default function TelegramCRM() {
             </motion.div>
           )}
 
-          {role === "client" && screen === "my-bookings" && (
+          {viewMode === "client" && screen === "my-bookings" && (
             <motion.div key="client-bookings" {...pageVariants} transition={{ duration: 0.2 }}>
               <MyBookingsScreen
                 appointments={appointments.filter((a) => a.clientId === "client-self")}
@@ -274,7 +277,7 @@ export default function TelegramCRM() {
       />
 
       {/* Нижняя навигация */}
-      <BottomNav currentScreen={screen} role={role} onNavigate={handleNavigate} />
+      <BottomNav currentScreen={screen} role={viewMode} onNavigate={handleNavigate} />
     </div>
   )
 }
