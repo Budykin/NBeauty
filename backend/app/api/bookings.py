@@ -33,20 +33,19 @@ async def create_booking(
 
     # 3. ПРОВЕРКИ КОНФЛИКТОВ
     # Запись невозможна, если (StartA < EndB) И (EndA > StartB)
+    busy_target_filter = Appointment.master_id == payload.master_id
+    if service.resource_id is not None:
+        busy_target_filter = or_(
+            busy_target_filter,
+            Appointment.resource_id == service.resource_id,
+        )
+
     conflict_query = select(Appointment).where(
         and_(
-            Appointment.status != AppointmentStatus.CANCELLED,  # Отмененные записи не учитываем
-            # Проверяем занятость мастера ИЛИ занятость кабинета
-            or_(
-                Appointment.master_id == payload.master_id,
-                and_(
-                    Appointment.resource_id == service.resource_id,
-                    service.resource_id.is_not(None)  # Учитываем кабинет, только если он нужен для услуги
-                )
-            ),
-            # Формула пересечения времени
+            Appointment.status != AppointmentStatus.CANCELLED,
+            busy_target_filter,
             Appointment.start_time < end_time,
-            Appointment.end_time > payload.start_time
+            Appointment.end_time > payload.start_time,
         )
     )
 
@@ -61,6 +60,7 @@ async def create_booking(
     new_appointment = Appointment(
         master_id=payload.master_id,
         client_id=payload.client_id,
+        salon_id=service.salon_id,
         service_id=payload.service_id,
         resource_id=service.resource_id,  # Автоматически привязываем нужный кабинет
         start_time=payload.start_time,
