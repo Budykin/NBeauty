@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import uuid
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
+from sqlalchemy import and_
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import SalonCreate, SalonJoin
@@ -14,6 +16,26 @@ from common.models import Salon, SalonMember, SalonMemberRole, User
 
 
 router = APIRouter()
+
+
+async def _check_salon_admin(session: AsyncSession, user_id: int, salon_id: uuid.UUID) -> None:
+    """Проверить, что пользователь — admin данного салона."""
+
+    result = await session.execute(
+        select(SalonMember).where(
+            and_(
+                SalonMember.salon_id == salon_id,
+                SalonMember.user_id == user_id,
+                SalonMember.role == SalonMemberRole.ADMIN,
+            )
+        )
+    )
+
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только admin салона может управлять участниками",
+        )
 
 
 @router.post("/create", response_model=SalonOut, status_code=status.HTTP_201_CREATED)
@@ -197,3 +219,46 @@ async def get_my_salons(
         ))
 
     return response
+
+
+@router.delete("/salons/{salon_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_member(
+    salon_id: str,
+    member_id: str,
+    authorization: str = Header(...),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Удалить участника из салона. Только для admin."""
+
+    current_user = await get_current_user(authorization)
+    salon_uuid = uuid.UUID(salon_id)
+    member_uuid = uuid.UUID(member_id)
+
+    await _check_salon_admin(session, current_user.tg_id, salon_uuid)
+
+    result = await session.execute(
+        select(SalonMember).where(
+            and_(
+                SalonMember.id == member_uuid,
+                SalonMember.salon_id == salon_uuid,
+            )
+        )
+    )
+    member = result.scalar_one_or_none()
+
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Участник не найден",
+        )
+
+    # Нельзя удалить самого себя (owner)
+    if member.user_id == current_user.tg_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя удалить самого себя. Используйте функцию передачи прав владельца.",
+        )
+
+    await session.delete(member)
+    await session.commit()
+

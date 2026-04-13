@@ -138,6 +138,20 @@ export default function TelegramCRM() {
     }
   }, [selectedSalon])
 
+  const handleDeleteResource = useCallback((resourceId: string) => {
+    setResources((prev) => prev.filter((r) => r.id !== resourceId))
+    if (selectedSalon) {
+      const updated = {
+        ...selectedSalon,
+        resources: selectedSalon.resources.filter((r) => r.id !== resourceId),
+      }
+      setSelectedSalon(updated)
+      setSalons((prev) =>
+        prev.map((s) => (s.id === updated.id ? updated : s))
+      )
+    }
+  }, [selectedSalon])
+
   // Записи текущего мастера
   const masterAppointments = appointments.filter((a) => a.masterId === CURRENT_MASTER_ID)
 
@@ -193,6 +207,7 @@ export default function TelegramCRM() {
                 onRemoveMember={handleRemoveMember}
                 onUpdateResource={handleUpdateResource}
                 onAddResource={handleAddResource}
+                onDeleteResource={handleDeleteResource}
               />
             </motion.div>
           )}

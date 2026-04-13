@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, Box, Pencil, Check, X } from "lucide-react"
+import { Plus, Box, Pencil, Check, X, Trash2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import {
   Drawer,
@@ -18,6 +18,7 @@ interface SalonResourcesPanelProps {
   resources: Resource[]
   onUpdateResource: (resource: Resource) => void
   onAddResource: (resource: Resource) => void
+  onDeleteResource: (resourceId: string) => void
   salonId: string
 }
 
@@ -25,12 +26,14 @@ export function SalonResourcesPanel({
   resources,
   onUpdateResource,
   onAddResource,
+  onDeleteResource,
   salonId,
 }: SalonResourcesPanelProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [newResourceName, setNewResourceName] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const handleAdd = () => {
     if (!newResourceName.trim()) return
@@ -183,12 +186,42 @@ export function SalonResourcesPanel({
                 )}
               </div>
 
-              <Switch
-                checked={resource.isActive}
-                onCheckedChange={(checked) =>
-                  onUpdateResource({ ...resource, isActive: checked })
-                }
-              />
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={resource.isActive}
+                  onCheckedChange={(checked) =>
+                    onUpdateResource({ ...resource, isActive: checked })
+                  }
+                />
+
+                {confirmDelete === resource.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        onDeleteResource(resource.id)
+                        setConfirmDelete(null)
+                      }}
+                      className="flex h-8 items-center gap-1 rounded-lg bg-destructive px-2.5 text-xs font-medium text-white"
+                    >
+                      Удалить
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(resource.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Удалить ресурс"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>

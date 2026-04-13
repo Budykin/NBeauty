@@ -19,6 +19,7 @@ interface SalonDashboardProps {
   onRemoveMember: (memberId: string) => void
   onUpdateResource: (resource: Resource) => void
   onAddResource: (resource: Resource) => void
+  onDeleteResource: (resourceId: string) => void
 }
 
 export function SalonDashboard({
@@ -30,6 +31,7 @@ export function SalonDashboard({
   onRemoveMember,
   onUpdateResource,
   onAddResource,
+  onDeleteResource,
 }: SalonDashboardProps) {
   const [activeTab, setActiveTab] = useState<"schedule" | "members" | "resources">("schedule")
 
@@ -101,6 +103,7 @@ export function SalonDashboard({
               resources={salon.resources}
               onUpdateResource={onUpdateResource}
               onAddResource={onAddResource}
+              onDeleteResource={onDeleteResource}
               salonId={salon.id}
             />
           </TabsContent>
