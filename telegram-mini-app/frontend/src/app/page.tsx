@@ -58,8 +58,25 @@ export default function TelegramCRM() {
     const initData = tg.initData || ""
     if (!initData) return
 
-    // Если уже авторизованы — пропускаем
-    if (isAuthenticated()) return
+    // Если уже авторизованы — проверяем, не истёк ли токен
+    if (isAuthenticated()) {
+      const token = getInitData()
+      // Если initData есть — перегенерируем токен для свежести
+      if (token) {
+        apiAuth.telegram(initData)
+          .then((res) => {
+            setAccessToken(res.accessToken)
+            setInitData(initData)
+            setCurrentUserId(String(res.userId))
+            setRole(res.role as Role)
+            setViewMode(res.role as Role)
+          })
+          .catch((err) => {
+            console.error("Re-auth failed:", err)
+          })
+      }
+      return
+    }
 
     // Отправляем initData на бэкенд → получаем JWT
     apiAuth.telegram(initData)

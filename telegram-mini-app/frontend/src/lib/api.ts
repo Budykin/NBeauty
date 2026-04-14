@@ -2,8 +2,6 @@
 // API клиент — все запросы к бэкенду
 // ============================================================================
 
-import { getAccessToken } from "./auth"
-
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
 // ============================================================================
@@ -12,9 +10,17 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retried = false
 ): Promise<T> {
-  const token = getAccessToken()
+  const { getAccessToken, isTokenExpired, refreshAuth } = await import("./auth")
+
+  let token = getAccessToken()
+
+  // Если токен истёк — обновляем до запроса
+  if (token && isTokenExpired(token)) {
+    token = await refreshAuth()
+  }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -29,6 +35,14 @@ async function request<T>(
     ...options,
     headers,
   })
+
+  // 401 — пытаемся обновить токен и повторить запрос (один раз)
+  if (res.status === 401 && !retried) {
+    const newToken = await refreshAuth()
+    if (newToken) {
+      return request<T>(path, options, true)
+    }
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }))
