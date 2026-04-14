@@ -26,7 +26,7 @@ services:
   bot:
     build:
       context: .
-      dockerfile: ./backend/Dockerfile
+      dockerfile: ./bot/Dockerfile
     command: ["python", "-m", "bot.main"]
     env_file:
       - .env
