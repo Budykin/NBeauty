@@ -13,6 +13,7 @@ import {
 } from "@/lib/mock-data"
 import { apiAuth, apiProfile, apiSalons, apiAppointments, apiServices, apiResources, ApiError } from "@/lib/api"
 import { setAccessToken, setInitData, getInitData, isAuthenticated } from "@/lib/auth"
+import { mapSalons, mapServices, mapResources, mapAppointments, mapScheduleToHours } from "@/lib/mappers"
 import { BottomNav } from "@/components/bottom-nav"
 import { MasterDashboard } from "@/components/master-dashboard"
 import { AddBookingDrawer } from "@/components/add-booking-drawer"
@@ -30,12 +31,11 @@ const pageVariants = {
   exit: { opacity: 0, y: -8 },
 }
 
-const CURRENT_MASTER_ID = "m1" // Текущий пользователь-мастер
-
 export default function TelegramCRM() {
   const [role, setRole] = useState<Role>("client")       // Статус из БД (client/master)
   const [viewMode, setViewMode] = useState<Role>("client")  // Режим просмотра
   const [screen, setScreen] = useState<Screen>("dashboard")
+  const [currentUserId, setCurrentUserId] = useState<string>("client-self")
   const [appointments, setAppointments] = useState<Appointment[]>(MOCK_APPOINTMENTS)
   const [services, setServices] = useState<Service[]>(MOCK_SERVICES)
   const [resources, setResources] = useState<Resource[]>(MOCK_RESOURCES)
@@ -47,7 +47,7 @@ export default function TelegramCRM() {
   const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null)
 
   const currentSalon = salons.find((s) =>
-    s.members.some((m) => m.masterId === CURRENT_MASTER_ID)
+    s.members.some((m) => m.masterId === currentUserId)
   ) || null
 
   // === AUTH: при первом запуске — логин через Telegram initData ===
@@ -66,6 +66,7 @@ export default function TelegramCRM() {
       .then((res) => {
         setAccessToken(res.accessToken)
         setInitData(initData)
+        setCurrentUserId(String(res.userId))
         setRole(res.role as Role)
         setViewMode(res.role as Role)
       })
@@ -80,18 +81,34 @@ export default function TelegramCRM() {
 
     const loadData = async () => {
       try {
-        const [me, mySalons, myServices, myResources] = await Promise.all([
+        const [me, mySalonsRes, myServicesRes, masterAppts] = await Promise.allSettled([
           apiProfile.getMe(),
-          apiSalons.my().catch(() => []),
-          apiServices.my().catch(() => []),
-          apiResources.bySalon("default-salon").catch(() => []),
+          apiSalons.my(),
+          apiServices.my(),
+          apiAppointments.my("master"),
         ])
 
-        setRole(me.role as Role)
-        setViewMode(me.role as Role)
+        // Устанавливаем роль из профиля
+        if (me.status === "fulfilled") {
+          setCurrentUserId(String(me.value.tgId))
+          setRole(me.value.role as Role)
+          setViewMode(me.value.role as Role)
+        }
 
-        // TODO: маппинг API → frontend types
-        // Пока используем моки, но role уже реальный
+        // Загружаем салоны
+        if (mySalonsRes.status === "fulfilled") {
+          setSalons(mapSalons(mySalonsRes.value))
+        }
+
+        // Загружаем услуги
+        if (myServicesRes.status === "fulfilled") {
+          setServices(mapServices(myServicesRes.value))
+        }
+
+        // Загружаем записи мастера
+        if (masterAppts.status === "fulfilled") {
+          setAppointments(mapAppointments(masterAppts.value))
+        }
       } catch (err) {
         console.error("Load data failed:", err)
       }
@@ -133,10 +150,15 @@ export default function TelegramCRM() {
     setAppointments((prev) => [...prev, apt])
   }, [])
 
-  const handleCancelAppointment = useCallback((id: string) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "cancelled" as const } : a))
-    )
+  const handleCancelAppointment = useCallback(async (id: string) => {
+    try {
+      await apiAppointments.cancel(Number(id))
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, status: "cancelled" as const } : a))
+      )
+    } catch (err) {
+      console.error("Cancel appointment failed:", err)
+    }
   }, [])
 
   const handleSelectMaster = useCallback((master: Master) => {
@@ -144,11 +166,23 @@ export default function TelegramCRM() {
     setScreen("booking-wizard")
   }, [])
 
-  const handleBookFromWizard = useCallback((apt: Appointment) => {
-    setAppointments((prev) => [...prev, apt])
-    setScreen("my-bookings")
-    setSelectedMaster(null)
-  }, [])
+  const handleBookFromWizard = useCallback(async (apt: Appointment) => {
+    try {
+      await apiAppointments.create({
+        masterId: Number(apt.masterId),
+        clientId: Number(currentUserId),
+        serviceId: Number(apt.service.id),
+        startTime: new Date(`${apt.date}T${apt.startTime}`).toISOString(),
+      })
+
+      // Обновляем локальный state
+      setAppointments((prev) => [...prev, apt])
+      setScreen("my-bookings")
+      setSelectedMaster(null)
+    } catch (err) {
+      console.error("Book appointment failed:", err)
+    }
+  }, [currentUserId])
 
   const handleSelectSalon = useCallback((salon: Salon) => {
     setSelectedSalon(salon)
@@ -203,22 +237,27 @@ export default function TelegramCRM() {
     }
   }, [selectedSalon])
 
-  const handleDeleteResource = useCallback((resourceId: string) => {
-    setResources((prev) => prev.filter((r) => r.id !== resourceId))
-    if (selectedSalon) {
-      const updated = {
-        ...selectedSalon,
-        resources: selectedSalon.resources.filter((r) => r.id !== resourceId),
+  const handleDeleteResource = useCallback(async (resourceId: string) => {
+    try {
+      await apiResources.delete(Number(resourceId))
+      setResources((prev) => prev.filter((r) => r.id !== resourceId))
+      if (selectedSalon) {
+        const updated = {
+          ...selectedSalon,
+          resources: selectedSalon.resources.filter((r) => r.id !== resourceId),
+        }
+        setSelectedSalon(updated)
+        setSalons((prev) =>
+          prev.map((s) => (s.id === updated.id ? updated : s))
+        )
       }
-      setSelectedSalon(updated)
-      setSalons((prev) =>
-        prev.map((s) => (s.id === updated.id ? updated : s))
-      )
+    } catch (err) {
+      console.error("Delete resource failed:", err)
     }
   }, [selectedSalon])
 
   // Записи текущего мастера
-  const masterAppointments = appointments.filter((a) => a.masterId === CURRENT_MASTER_ID)
+  const masterAppointments = appointments.filter((a) => a.masterId === currentUserId)
 
   return (
     <div className="mx-auto flex min-h-svh max-w-[430px] flex-col bg-background">
@@ -233,7 +272,7 @@ export default function TelegramCRM() {
                 allAppointments={appointments}
                 resources={resources}
                 salon={currentSalon}
-                currentMasterId={CURRENT_MASTER_ID}
+                currentMasterId={currentUserId}
                 selectedDate={selectedDate}
                 onSelectDate={setSelectedDate}
                 onAddBooking={() => setDrawerOpen(true)}
@@ -300,7 +339,7 @@ export default function TelegramCRM() {
           {viewMode === "client" && screen === "my-bookings" && (
             <motion.div key="client-bookings" {...pageVariants} transition={{ duration: 0.2 }}>
               <MyBookingsScreen
-                appointments={appointments.filter((a) => a.clientId === "client-self")}
+                appointments={appointments.filter((a) => a.clientId === currentUserId)}
                 onCancel={handleCancelAppointment}
               />
             </motion.div>
@@ -312,7 +351,7 @@ export default function TelegramCRM() {
               <ProfileScreen
                 role={role}
                 salons={salons}
-                currentMasterId={CURRENT_MASTER_ID}
+                currentMasterId={currentUserId}
                 onToggleRole={handleToggleRole}
                 onBecomeMaster={handleBecomeMaster}
                 onNavigate={(s) => setScreen(s)}
