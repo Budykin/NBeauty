@@ -1,8 +1,11 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Loader2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { apiSchedules } from "@/lib/api"
+import { mapScheduleToHours } from "@/lib/mappers"
 import type { WorkingHours as WorkingHoursType } from "@/lib/types"
 
 interface WorkingHoursProps {
@@ -12,16 +15,48 @@ interface WorkingHoursProps {
 }
 
 export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProps) {
-  function handleToggle(index: number) {
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  // Загружаем расписание с сервера при первом открытии
+  useEffect(() => {
+    if (loaded) return
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      try {
+        const schedules = await apiSchedules.my()
+        if (!cancelled) {
+          const mapped = schedules.map(mapScheduleToHours)
+          onUpdate(mapped)
+          setLoaded(true)
+        }
+      } catch (err) {
+        console.error("Load schedules failed:", err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [loaded, onUpdate])
+
+  async function handleToggle(index: number) {
     const updated = [...hours]
     updated[index] = { ...updated[index], enabled: !updated[index].enabled }
     onUpdate(updated)
+
+    // TODO: синхронизация с API когда будет schedule_id в WorkingHours
   }
 
-  function handleTimeChange(index: number, field: "start" | "end", value: string) {
+  async function handleTimeChange(index: number, field: "start" | "end", value: string) {
     const updated = [...hours]
     updated[index] = { ...updated[index], [field]: value }
     onUpdate(updated)
+
+    // TODO: синхронизация с API когда будет schedule_id в WorkingHours
   }
 
   return (
@@ -39,6 +74,12 @@ export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProp
           <p className="text-sm text-muted-foreground">Настройте расписание</p>
         </div>
       </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : (
 
       <div className="flex flex-col gap-2">
         {hours.map((h, i) => (
@@ -77,6 +118,7 @@ export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProp
           </motion.div>
         ))}
       </div>
+      )}
     </div>
   )
 }

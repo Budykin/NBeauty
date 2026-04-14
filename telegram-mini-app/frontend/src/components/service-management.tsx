@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Plus, Trash2, Scissors, Box, Info } from "lucide-react"
+import { Plus, Trash2, Scissors, Box, Info, Loader2 } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { apiServices } from "@/lib/api"
 import type { Service, Resource } from "@/lib/types"
 
 interface ServiceManagementProps {
@@ -26,26 +27,65 @@ interface ServiceManagementProps {
 
 export function ServiceManagement({ services, resources, onUpdate }: ServiceManagementProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [loading, setLoading] = useState<string | null>(null)
 
-  function handleAdd() {
-    const newService: Service = {
-      id: `s-${Date.now()}`,
-      name: "",
-      price: 0,
-      duration: 30,
+  async function handleAdd() {
+    setLoading("add")
+    try {
+      const created = await apiServices.create({
+        name: "Новая услуга",
+        price: 0,
+        duration: 30,
+      })
+      const newService: Service = {
+        id: String(created.id),
+        name: created.name,
+        price: created.price,
+        duration: created.duration,
+        resourceId: created.resourceId ? String(created.resourceId) : undefined,
+      }
+      onUpdate([...services, newService])
+      setEditingId(newService.id)
+    } catch (err) {
+      console.error("Create service failed:", err)
+    } finally {
+      setLoading(null)
     }
-    onUpdate([...services, newService])
-    setEditingId(newService.id)
   }
 
-  function handleUpdate(id: string, field: keyof Service, value: string | number) {
+  async function handleUpdate(id: string, field: keyof Service, value: string | number) {
+    const service = services.find((s) => s.id === id)
+    if (!service) return
+
+    const apiData: Record<string, unknown> = {}
+    if (field === "name") apiData.name = value
+    if (field === "price") apiData.price = Number(value)
+    if (field === "duration") apiData.duration = Number(value)
+    if (field === "resourceId") apiData.resourceId = value ? Number(value) : null
+
+    // Сначала обновляем локально (оптимистично)
     onUpdate(
       services.map((s) => (s.id === id ? { ...s, [field]: value } : s))
     )
+
+    // Потом отправляем на сервер
+    try {
+      await apiServices.update(Number(id), apiData)
+    } catch (err) {
+      console.error("Update service failed:", err)
+    }
   }
 
-  function handleDelete(id: string) {
-    onUpdate(services.filter((s) => s.id !== id))
+  async function handleDelete(id: string) {
+    setLoading(`delete-${id}`)
+    try {
+      await apiServices.delete(Number(id))
+      onUpdate(services.filter((s) => s.id !== id))
+    } catch (err) {
+      console.error("Delete service failed:", err)
+    } finally {
+      setLoading(null)
+    }
   }
 
   return (
@@ -57,9 +97,14 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
         </div>
         <button
           onClick={handleAdd}
-          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95"
+          disabled={loading === "add"}
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95 disabled:opacity-50"
         >
-          <Plus className="h-3.5 w-3.5" />
+          {loading === "add" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
           Добавить
         </button>
       </div>

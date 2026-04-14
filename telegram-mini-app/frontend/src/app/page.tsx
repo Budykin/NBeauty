@@ -356,6 +356,7 @@ export default function TelegramCRM() {
                 onBecomeMaster={handleBecomeMaster}
                 onNavigate={(s) => setScreen(s)}
                 onSelectSalon={handleSelectSalon}
+                onSalonsChange={setSalons}
               />
             </motion.div>
           )}

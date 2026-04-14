@@ -1,8 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles } from "lucide-react"
+import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { apiSalons } from "@/lib/api"
+import { mapSalons } from "@/lib/mappers"
 import type { Role, Salon } from "@/lib/types"
 
 interface ProfileScreenProps {
@@ -13,6 +15,7 @@ interface ProfileScreenProps {
   onBecomeMaster: () => void
   onNavigate: (screen: "working-hours" | "salon-dashboard") => void
   onSelectSalon: (salon: Salon) => void
+  onSalonsChange: (salons: Salon[]) => void
 }
 
 export function ProfileScreen({
@@ -23,11 +26,39 @@ export function ProfileScreen({
   onBecomeMaster,
   onNavigate,
   onSelectSalon,
+  onSalonsChange,
 }: ProfileScreenProps) {
   const isMaster = role === "master"
   const mySalons = salons.filter((s) =>
     s.members.some((m) => m.masterId === currentMasterId)
   )
+
+  async function handleCreateSalon() {
+    const name = prompt("Название салона:")
+    if (!name) return
+
+    try {
+      const created = await apiSalons.create(name)
+      onSalonsChange([...salons, mapSalons([created])[0]])
+    } catch (err) {
+      console.error("Create salon failed:", err)
+      alert("Не удалось создать салон")
+    }
+  }
+
+  async function handleJoinSalon() {
+    const code = prompt("Код приглашения:")
+    if (!code) return
+
+    try {
+      const joined = await apiSalons.join(code)
+      onSalonsChange([...salons, mapSalons([joined])[0]])
+      alert(`Вы вступили в салон "${joined.name}"!`)
+    } catch (err) {
+      console.error("Join salon failed:", err)
+      alert("Неверный код приглашения")
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5 px-4 pb-4 pt-3">
@@ -101,7 +132,7 @@ export function ProfileScreen({
       )}
 
       {/* Мои салоны */}
-      {isMaster && mySalons.length > 0 && (
+      {isMaster && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -109,6 +140,25 @@ export function ProfileScreen({
           className="flex flex-col gap-2"
         >
           <p className="text-xs font-medium text-muted-foreground">Мои салоны</p>
+
+          {/* Кнопки создать/вступить */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateSalon}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-accent"
+            >
+              <Plus className="h-4 w-4 text-primary" />
+              Создать
+            </button>
+            <button
+              onClick={handleJoinSalon}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-card p-3 text-sm font-medium text-foreground transition-all active:scale-[0.98] hover:bg-accent"
+            >
+              <LogIn className="h-4 w-4 text-primary" />
+              Вступить
+            </button>
+          </div>
+
           {mySalons.map((salon) => {
             const myMembership = salon.members.find((m) => m.masterId === currentMasterId)
             const isAdmin = myMembership?.role === "admin"
