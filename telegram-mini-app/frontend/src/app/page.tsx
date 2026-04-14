@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import type { Screen, Role, Appointment, Service, WorkingHours, Master, Salon, Resource } from "@/lib/types"
 import {
@@ -11,6 +11,8 @@ import {
   MOCK_SALONS,
   MOCK_RESOURCES,
 } from "@/lib/mock-data"
+import { apiAuth, apiProfile, apiSalons, apiAppointments, apiServices, apiResources, ApiError } from "@/lib/api"
+import { setAccessToken, setInitData, getInitData, isAuthenticated } from "@/lib/auth"
 import { BottomNav } from "@/components/bottom-nav"
 import { MasterDashboard } from "@/components/master-dashboard"
 import { AddBookingDrawer } from "@/components/add-booking-drawer"
@@ -48,6 +50,56 @@ export default function TelegramCRM() {
     s.members.some((m) => m.masterId === CURRENT_MASTER_ID)
   ) || null
 
+  // === AUTH: при первом запуске — логин через Telegram initData ===
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp
+    if (!tg) return
+
+    const initData = tg.initData || ""
+    if (!initData) return
+
+    // Если уже авторизованы — пропускаем
+    if (isAuthenticated()) return
+
+    // Отправляем initData на бэкенд → получаем JWT
+    apiAuth.telegram(initData)
+      .then((res) => {
+        setAccessToken(res.accessToken)
+        setInitData(initData)
+        setRole(res.role as Role)
+        setViewMode(res.role as Role)
+      })
+      .catch((err) => {
+        console.error("Auth failed:", err)
+      })
+  }, [])
+
+  // === LOAD USER DATA: загружаем профиль и данные салона ===
+  useEffect(() => {
+    if (!isAuthenticated()) return
+
+    const loadData = async () => {
+      try {
+        const [me, mySalons, myServices, myResources] = await Promise.all([
+          apiProfile.getMe(),
+          apiSalons.my().catch(() => []),
+          apiServices.my().catch(() => []),
+          apiResources.bySalon("default-salon").catch(() => []),
+        ])
+
+        setRole(me.role as Role)
+        setViewMode(me.role as Role)
+
+        // TODO: маппинг API → frontend types
+        // Пока используем моки, но role уже реальный
+      } catch (err) {
+        console.error("Load data failed:", err)
+      }
+    }
+
+    loadData()
+  }, [])
+
   const handleNavigate = useCallback((s: Screen) => {
     setScreen(s)
     setSelectedMaster(null)
@@ -65,12 +117,16 @@ export default function TelegramCRM() {
     })
   }, [])
 
-  const handleBecomeMaster = useCallback(() => {
-    // TODO: POST /api/me/become-master → обновить роль в БД
-    setRole("master")
-    setViewMode("master")
-    setScreen("dashboard")
-    setSelectedSalon(null)
+  const handleBecomeMaster = useCallback(async () => {
+    try {
+      await apiProfile.becomeMaster()
+      setRole("master")
+      setViewMode("master")
+      setScreen("dashboard")
+      setSelectedSalon(null)
+    } catch (err) {
+      console.error("Become master failed:", err)
+    }
   }, [])
 
   const handleAddAppointment = useCallback((apt: Appointment) => {
