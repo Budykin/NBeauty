@@ -2,7 +2,15 @@
 // API клиент — все запросы к бэкенду
 // ============================================================================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+const rawApiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "")
+const API_BASE = rawApiBase
+  ? (rawApiBase.endsWith("/api") ? rawApiBase : `${rawApiBase}/api`)
+  : "/api"
+
+type RequestOptions = RequestInit & {
+  withAuth?: boolean
+  retryAuthOn401?: boolean
+}
 
 // ============================================================================
 // Helpers
@@ -10,34 +18,39 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
 async function request<T>(
   path: string,
-  options: RequestInit = {},
+  options: RequestOptions = {},
   retried = false
 ): Promise<T> {
   const { getAccessToken, isTokenExpired, refreshAuth } = await import("./auth")
+  const {
+    withAuth = true,
+    retryAuthOn401 = withAuth,
+    ...fetchOptions
+  } = options
 
-  let token = getAccessToken()
+  let token = withAuth ? getAccessToken() : null
 
   // Если токен истёк — обновляем до запроса
-  if (token && isTokenExpired(token)) {
+  if (withAuth && token && isTokenExpired(token)) {
     token = await refreshAuth()
   }
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...Object.entries(options.headers || {}).reduce((acc, [k, v]) => {
+    ...Object.entries(fetchOptions.headers || {}).reduce((acc, [k, v]) => {
       if (typeof v === "string") acc[k] = v
       return acc
     }, {} as Record<string, string>),
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
   })
 
   // 401 — пытаемся обновить токен и повторить запрос (один раз)
-  if (res.status === 401 && !retried) {
+  if (withAuth && retryAuthOn401 && res.status === 401 && !retried) {
     const newToken = await refreshAuth()
     if (newToken) {
       return request<T>(path, options, true)
@@ -139,6 +152,25 @@ export interface ApiAppointment {
   createdAt: string
 }
 
+export interface ApiMasterService {
+  id: string
+  name: string
+  price: number
+  duration: number
+  resourceId?: string
+}
+
+export interface ApiMaster {
+  id: string
+  name: string
+  avatar: string
+  specialty: string
+  rating: number
+  reviewCount: number
+  services: ApiMasterService[]
+  salonId?: string
+}
+
 export interface ApiTimeSlot {
   start: string
   end: string
@@ -150,7 +182,21 @@ export interface ApiAuthResponse {
   userId: number
   fullName: string
   username?: string
-  role: string
+  role: "client" | "master"
+}
+
+export interface ApiLoginSessionResponse {
+  token: string
+  status: "pending" | "completed" | "expired"
+  expiresAt: string
+  botLink: string
+}
+
+export interface ApiLoginSessionStatusResponse {
+  status: "pending" | "completed" | "expired"
+  expiresAt: string
+  botLink: string
+  auth?: ApiAuthResponse | null
 }
 
 // ============================================================================
@@ -162,6 +208,23 @@ export const apiAuth = {
     return request<ApiAuthResponse>("/auth/telegram", {
       method: "POST",
       body: JSON.stringify({ initData }),
+      withAuth: false,
+      retryAuthOn401: false,
+    })
+  },
+
+  createLoginSession() {
+    return request<ApiLoginSessionResponse>("/auth/telegram/login-session", {
+      method: "POST",
+      withAuth: false,
+      retryAuthOn401: false,
+    })
+  },
+
+  getLoginSession(token: string) {
+    return request<ApiLoginSessionStatusResponse>(`/auth/telegram/login-session/${token}`, {
+      withAuth: false,
+      retryAuthOn401: false,
     })
   },
 }
@@ -201,11 +264,11 @@ export const apiProfile = {
 
 export const apiMasters = {
   list() {
-    return request<ApiUser[]>("/masters/")
+    return request<ApiMaster[]>("/masters/")
   },
 
   getById(id: number) {
-    return request<ApiUser>(`/masters/${id}`)
+    return request<ApiMaster>(`/masters/${id}`)
   },
 
   slots(masterId: number, serviceId: number, date: string, stepMinutes = 30) {

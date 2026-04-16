@@ -6,18 +6,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import and_, or_
 
+from backend.app.core.auth import get_current_user
+from backend.app.schemas.common import AppointmentOut
 from common.db import get_async_session
 from common.models import Appointment, Service, AppointmentStatus, User
 from common.notifications import notify_appointment_created
-from backend.app.schemas.bookings import BookingCreate, BookingOut
+from backend.app.schemas.bookings import BookingCreate
 
 router = APIRouter()
 
 
-@router.post("/create", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
+@router.post("/create", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)
 async def create_booking(
         payload: BookingCreate,
-        session: AsyncSession = Depends(get_async_session)
+        current_user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_async_session),
 ):
     """Создать новую запись с проверкой доступности времени и кабинета."""
 
@@ -28,6 +31,12 @@ async def create_booking(
 
     if not service:
         raise HTTPException(status_code=404, detail="Услуга не найдена")
+
+    if int(payload.master_id) != service.master_id:
+        raise HTTPException(status_code=400, detail="Услуга не принадлежит выбранному мастеру")
+
+    if int(payload.client_id) != current_user.tg_id:
+        raise HTTPException(status_code=403, detail="Нельзя создать запись от имени другого клиента")
 
     # 2. Вычисляем время окончания на основе длительности услуги
     end_time = payload.start_time + timedelta(minutes=service.duration)
@@ -58,8 +67,8 @@ async def create_booking(
 
     # 4. Если конфликтов нет, создаем запись
     new_appointment = Appointment(
-        master_id=payload.master_id,
-        client_id=payload.client_id,
+        master_id=service.master_id,
+        client_id=current_user.tg_id,
         salon_id=service.salon_id,
         service_id=payload.service_id,
         resource_id=service.resource_id,
@@ -74,21 +83,16 @@ async def create_booking(
 
     # 5. Отправляем уведомление мастеру (в фоне, не блокируя ответ)
     master_result = await session.execute(
-        select(User).where(User.tg_id == payload.master_id)
+        select(User).where(User.tg_id == service.master_id)
     )
     master = master_result.scalar_one_or_none()
 
-    client_result = await session.execute(
-        select(User).where(User.tg_id == payload.client_id)
-    )
-    client = client_result.scalar_one_or_none()
-
-    if master and client:
+    if master:
         start_str = new_appointment.start_time.strftime("%d.%m.%Y %H:%M")
         asyncio.create_task(
             notify_appointment_created(
                 master_tg_id=master.tg_id,
-                client_name=client.full_name,
+                client_name=current_user.full_name,
                 service_name=service.name,
                 date_str=start_str,
                 start_time=start_str,
@@ -96,13 +100,17 @@ async def create_booking(
             )
         )
 
-    return BookingOut(
-        id=str(new_appointment.id),
-        master_id=str(new_appointment.master_id),
-        client_id=str(new_appointment.client_id),
-        service_id=str(new_appointment.service_id),
-        resource_id=str(new_appointment.resource_id) if new_appointment.resource_id else None,
+    return AppointmentOut(
+        id=new_appointment.id,
+        salon_id=str(new_appointment.salon_id) if new_appointment.salon_id else None,
+        master_id=new_appointment.master_id,
+        master_name=master.full_name if master else "Неизвестный",
+        client_id=current_user.tg_id,
+        client_name=current_user.full_name,
+        service_name=service.name,
+        resource_id=new_appointment.resource_id,
         start_time=new_appointment.start_time,
         end_time=new_appointment.end_time,
-        status=new_appointment.status.value
+        status=new_appointment.status.value,
+        created_at=new_appointment.created_at,
     )

@@ -30,10 +30,9 @@ async def main():
     dp.include_router(start_router)
     dp.include_router(master_router)
 
-    # Удаляем вебхуки (если были) и запускаем поллинг
-    await bot.delete_webhook(drop_pending_updates=True)
-
     try:
+        # Удаляем вебхуки (если были) и запускаем поллинг
+        await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
         await bot.session.close()

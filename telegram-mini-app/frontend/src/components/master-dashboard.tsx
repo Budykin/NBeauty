@@ -15,7 +15,8 @@ interface MasterDashboardProps {
   currentMasterId: string
   selectedDate: Date
   onSelectDate: (date: Date) => void
-  onAddBooking: () => void
+  onAddBooking?: () => void
+  showAddBooking?: boolean
 }
 
 function getDaysAround(center: Date, range = 14) {
@@ -55,6 +56,7 @@ export function MasterDashboard({
   selectedDate,
   onSelectDate,
   onAddBooking,
+  showAddBooking = false,
 }: MasterDashboardProps) {
   const days = useMemo(() => getDaysAround(new Date()), [])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -100,13 +102,15 @@ export function MasterDashboard({
           <h1 className="text-lg font-semibold text-foreground">Мои записи</h1>
           <p className="text-sm text-muted-foreground">{formatDateRu(selectedDate)}, {isToday(selectedDate) ? "сегодня" : WEEKDAYS_RU[selectedDate.getDay()]}</p>
         </div>
-        <button
-          onClick={onAddBooking}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-transform active:scale-95"
-          aria-label="Добавить запись"
-        >
-          <Plus className="h-5 w-5" />
-        </button>
+        {showAddBooking && onAddBooking ? (
+          <button
+            onClick={onAddBooking}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-transform active:scale-95"
+            aria-label="Добавить запись"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        ) : null}
       </div>
 
       {/* Горизонтальный выбор дат */}
@@ -150,9 +154,11 @@ export function MasterDashboard({
                 <Clock className="h-7 w-7 text-muted-foreground" />
               </div>
               <p className="text-sm font-medium text-muted-foreground">Нет записей на этот день</p>
-              <button onClick={onAddBooking} className="mt-1 text-sm font-medium text-primary">
-                Добавить запись
-              </button>
+              {showAddBooking && onAddBooking ? (
+                <button onClick={onAddBooking} className="mt-1 text-sm font-medium text-primary">
+                  Добавить запись
+                </button>
+              ) : null}
             </motion.div>
           ) : (
             <motion.div

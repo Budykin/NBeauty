@@ -12,12 +12,12 @@ import type {
   WorkingHours,
 } from "./types"
 import type {
+  ApiMaster,
   ApiResource,
   ApiService,
   ApiAppointment,
   ApiSalon,
   ApiSalonMember,
-  ApiUser,
   ApiSchedule,
 } from "./api"
 
@@ -64,7 +64,6 @@ export function mapService(api: ApiService): Service {
 
 export function mapAppointment(
   api: ApiAppointment,
-  services: Service[] = []
 ): Appointment {
   // Извлекаем дату из startTime (ISO string → YYYY-MM-DD)
   const start = new Date(api.startTime)
@@ -97,18 +96,25 @@ export function mapAppointment(
 }
 
 // ============================================================================
-// Master (из ApiUser)
+// Master
 // ============================================================================
 
-export function mapMaster(user: ApiUser, services: Service[] = []): Master {
+export function mapMaster(master: ApiMaster): Master {
   return {
-    id: String(user.tgId),
-    name: user.fullName,
-    avatar: user.avatar || user.fullName.slice(0, 2).toUpperCase(),
-    specialty: user.specialty || "Мастер",
-    rating: user.rating,
-    reviewCount: user.reviewCount,
-    services,
+    id: master.id,
+    name: master.name,
+    avatar: master.avatar || master.name.slice(0, 2).toUpperCase(),
+    specialty: master.specialty || "Мастер",
+    rating: master.rating,
+    reviewCount: master.reviewCount,
+    services: master.services.map((service) => ({
+      id: service.id,
+      name: service.name,
+      price: service.price,
+      duration: service.duration,
+      resourceId: service.resourceId ?? undefined,
+    })),
+    salonId: master.salonId ?? undefined,
   }
 }
 
@@ -149,12 +155,61 @@ export function mapSalon(api: ApiSalon): Salon {
 export function mapScheduleToHours(api: ApiSchedule): WorkingHours {
   const dayInfo = DAY_NAMES[api.dayOfWeek] || { full: "Неизвестно", short: "?" }
   return {
+    scheduleId: api.id,
+    salonId: api.salonId,
+    dayOfWeek: api.dayOfWeek,
     day: dayInfo.full,
     dayShort: dayInfo.short,
     enabled: api.isEnabled,
     start: api.startTime,
     end: api.endTime,
   }
+}
+
+export function createDefaultWorkingHours(): WorkingHours[] {
+  return DAY_NAMES.map((dayInfo, dayOfWeek) => {
+    if (dayOfWeek === 4) {
+      return {
+        dayOfWeek,
+        day: dayInfo.full,
+        dayShort: dayInfo.short,
+        enabled: true,
+        start: "09:00",
+        end: "17:00",
+      }
+    }
+
+    if (dayOfWeek === 5) {
+      return {
+        dayOfWeek,
+        day: dayInfo.full,
+        dayShort: dayInfo.short,
+        enabled: true,
+        start: "10:00",
+        end: "15:00",
+      }
+    }
+
+    if (dayOfWeek === 6) {
+      return {
+        dayOfWeek,
+        day: dayInfo.full,
+        dayShort: dayInfo.short,
+        enabled: false,
+        start: "10:00",
+        end: "15:00",
+      }
+    }
+
+    return {
+      dayOfWeek,
+      day: dayInfo.full,
+      dayShort: dayInfo.short,
+      enabled: true,
+      start: "09:00",
+      end: "18:00",
+    }
+  })
 }
 
 // ============================================================================
@@ -175,4 +230,8 @@ export function mapAppointments(arr: ApiAppointment[]): Appointment[] {
 
 export function mapSalons(arr: ApiSalon[]): Salon[] {
   return arr.map(mapSalon)
+}
+
+export function mapMasters(arr: ApiMaster[]): Master[] {
+  return arr.map(mapMaster)
 }

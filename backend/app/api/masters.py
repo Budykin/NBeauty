@@ -17,13 +17,17 @@ router = APIRouter()
 
 def map_user_to_master_out(master: User) -> MasterOut:
     """Вспомогательная функция для маппинга модели БД в схему ответа."""
+    primary_salon_id = next(
+        (str(service.salon_id) for service in master.services if service.salon_id is not None),
+        None,
+    )
     return MasterOut(
         id=str(master.tg_id),
         name=master.full_name,
-        avatar=master.full_name[:2].upper(),
-        specialty="Мастер красоты",
-        rating=5.0,
-        review_count=0,
+        avatar=(master.avatar or master.full_name[:2].upper()),
+        specialty=(master.specialty or "Мастер красоты"),
+        rating=float(master.rating),
+        review_count=master.review_count,
         services=[
             ServiceOut(
                 id=str(s.id),
@@ -33,7 +37,7 @@ def map_user_to_master_out(master: User) -> MasterOut:
                 resource_id=str(s.resource_id) if s.resource_id else None
             ) for s in master.services
         ],
-        salon_id=None
+        salon_id=primary_salon_id,
     )
 
 

@@ -19,14 +19,16 @@ class MeOut(BaseModel):
     rating: float
     review_count: int = Field(serialization_alias="reviewCount")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class MeUpdate(BaseModel):
     """Обновление профиля."""
-    full_name: Optional[str] = Field(default=None, serialization_alias="fullName")
+    full_name: Optional[str] = Field(default=None, alias="fullName")
     specialty: Optional[str] = None
     avatar: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class BecomeMasterOut(BaseModel):

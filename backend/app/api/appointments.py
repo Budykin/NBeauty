@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 from datetime import date
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_
+from sqlalchemy import or_
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import AppointmentOut, TimeSlotOut
@@ -23,6 +23,31 @@ from common.notifications import notify_appointment_cancelled
 
 
 router = APIRouter()
+
+
+def _appointment_options():
+    return (
+        selectinload(Appointment.service),
+        selectinload(Appointment.master),
+        selectinload(Appointment.client),
+    )
+
+
+def _to_appointment_out(appointment: Appointment) -> AppointmentOut:
+    return AppointmentOut(
+        id=appointment.id,
+        salon_id=str(appointment.salon_id) if appointment.salon_id else None,
+        master_id=appointment.master_id,
+        master_name=appointment.master.full_name if appointment.master else "Неизвестный",
+        client_id=appointment.client_id,
+        client_name=appointment.client.full_name if appointment.client else "Неизвестный",
+        service_name=appointment.service.name if appointment.service else "Неизвестная услуга",
+        resource_id=appointment.resource_id,
+        start_time=appointment.start_time,
+        end_time=appointment.end_time,
+        status=appointment.status.value,
+        created_at=appointment.created_at,
+    )
 
 
 @router.get("/{master_id}/slots", response_model=List[TimeSlotOut])
@@ -60,20 +85,15 @@ async def get_master_slots(
 @router.get("/my", response_model=List[AppointmentOut])
 async def get_my_appointments(
     role: str = Query(default="master", description="Контекст: 'master' или 'client'"),
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить записи текущего пользователя (как мастера или клиента)."""
 
-    current_user = await get_current_user(authorization)
-
     if role == "master":
         query = (
             select(Appointment)
-            .options(
-                selectinload(Appointment.service),
-                selectinload(Appointment.master).selectinload(User.services),
-            )
+            .options(*_appointment_options())
             .where(
                 Appointment.master_id == current_user.tg_id,
                 Appointment.status != AppointmentStatus.CANCELLED,
@@ -83,10 +103,7 @@ async def get_my_appointments(
     else:
         query = (
             select(Appointment)
-            .options(
-                selectinload(Appointment.service),
-                selectinload(Appointment.master).selectinload(User.services),
-            )
+            .options(*_appointment_options())
             .where(
                 Appointment.client_id == current_user.tg_id,
                 Appointment.status != AppointmentStatus.CANCELLED,
@@ -96,95 +113,51 @@ async def get_my_appointments(
 
     result = await session.execute(query)
     appointments = result.scalars().all()
-
-    response = []
-    for apt in appointments:
-        response.append(AppointmentOut(
-            id=apt.id,
-            salon_id=str(apt.salon_id) if apt.salon_id else None,
-            master_id=apt.master_id,
-            master_name=apt.master.full_name if apt.master else "Неизвестный",
-            client_id=apt.client_id,
-            client_name=apt.client.full_name if apt.client else "Неизвестный",
-            service_name=apt.service.name if apt.service else "Неизвестная услуга",
-            resource_id=apt.resource_id,
-            start_time=apt.start_time,
-            end_time=apt.end_time,
-            status=apt.status.value,
-            created_at=apt.created_at,
-        ))
-
-    return response
+    return [_to_appointment_out(appointment) for appointment in appointments]
 
 
 @router.get("/my/history", response_model=List[AppointmentOut])
 async def get_my_appointments_history(
     role: str = Query(default="master", description="Контекст: 'master' или 'client'"),
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить историю записей (включая отменённые и завершённые)."""
 
-    current_user = await get_current_user(authorization)
-
     if role == "master":
         query = (
             select(Appointment)
-            .options(
-                selectinload(Appointment.service),
-                selectinload(Appointment.master).selectinload(User.services),
-            )
+            .options(*_appointment_options())
             .where(Appointment.master_id == current_user.tg_id)
             .order_by(Appointment.start_time.desc())
         )
     else:
         query = (
             select(Appointment)
-            .options(
-                selectinload(Appointment.service),
-                selectinload(Appointment.master).selectinload(User.services),
-            )
+            .options(*_appointment_options())
             .where(Appointment.client_id == current_user.tg_id)
             .order_by(Appointment.start_time.desc())
         )
 
     result = await session.execute(query)
     appointments = result.scalars().all()
-
-    response = []
-    for apt in appointments:
-        response.append(AppointmentOut(
-            id=apt.id,
-            salon_id=str(apt.salon_id) if apt.salon_id else None,
-            master_id=apt.master_id,
-            master_name=apt.master.full_name if apt.master else "Неизвестный",
-            client_id=apt.client_id,
-            client_name=apt.client.full_name if apt.client else "Неизвестный",
-            service_name=apt.service.name if apt.service else "Неизвестная услуга",
-            resource_id=apt.resource_id,
-            start_time=apt.start_time,
-            end_time=apt.end_time,
-            status=apt.status.value,
-            created_at=apt.created_at,
-        ))
-
-    return response
+    return [_to_appointment_out(appointment) for appointment in appointments]
 
 
 @router.put("/{appointment_id}/cancel", response_model=AppointmentOut)
 async def cancel_appointment(
     appointment_id: int,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Отменить запись."""
 
-    current_user = await get_current_user(authorization)
-
     result = await session.execute(
-        select(Appointment).where(
+        select(Appointment)
+        .options(*_appointment_options())
+        .where(
             Appointment.id == appointment_id,
-            and_(
+            or_(
                 Appointment.master_id == current_user.tg_id,
                 Appointment.client_id == current_user.tg_id,
             ),
@@ -207,7 +180,6 @@ async def cancel_appointment(
     appointment.status = AppointmentStatus.CANCELLED
     session.add(appointment)
     await session.commit()
-    await session.refresh(appointment)
 
     # Отправляем уведомление мастеру об отмене (в фоне)
     if appointment.master_id != current_user.tg_id:
@@ -233,17 +205,4 @@ async def cancel_appointment(
                 )
             )
 
-    return AppointmentOut(
-        id=appointment.id,
-        salon_id=str(appointment.salon_id) if appointment.salon_id else None,
-        master_id=appointment.master_id,
-        master_name=appointment.master.full_name if appointment.master else "Неизвестный",
-        client_id=appointment.client_id,
-        client_name=appointment.client.full_name if appointment.client else "Неизвестный",
-        service_name=appointment.service.name if appointment.service else "Неизвестная услуга",
-        resource_id=appointment.resource_id,
-        start_time=appointment.start_time,
-        end_time=appointment.end_time,
-        status=appointment.status.value,
-        created_at=appointment.created_at,
-    )
+    return _to_appointment_out(appointment)

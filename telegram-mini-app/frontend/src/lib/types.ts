@@ -59,6 +59,9 @@ export interface Salon {
 }
 
 export interface WorkingHours {
+  scheduleId?: number
+  salonId?: string
+  dayOfWeek: number
   day: string
   dayShort: string
   enabled: boolean

@@ -53,7 +53,7 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
     }
   }
 
-  async function handleUpdate(id: string, field: keyof Service, value: string | number) {
+  async function handleUpdate(id: string, field: keyof Service, value: string | number | undefined) {
     const service = services.find((s) => s.id === id)
     if (!service) return
 

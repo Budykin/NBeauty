@@ -61,11 +61,11 @@ export function SalonMembersPanel({ salon, onRemoveMember, onCopyInvite }: Salon
               className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-all active:scale-[0.98]"
             >
               <Share2 className="h-4 w-4" />
-              Скопировать ссылку
+              Скопировать код
             </button>
 
             <p className="text-center text-xs text-muted-foreground">
-              Мастер перейдёт по ссылке и будет добавлен в ваш салон
+              Код можно отправить мастеру, чтобы он вступил в салон из профиля приложения
             </p>
           </div>
         </DrawerContent>

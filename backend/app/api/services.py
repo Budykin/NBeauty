@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -16,12 +16,10 @@ router = APIRouter()
 
 @router.get("/my", response_model=List[ServiceOut])
 async def get_my_services(
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить все услуги текущего мастера."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Service)
@@ -47,12 +45,10 @@ async def get_my_services(
 @router.post("/", response_model=ServiceOut, status_code=status.HTTP_201_CREATED)
 async def create_service(
     payload: ServiceCreate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Создать новую услугу."""
-
-    current_user = await get_current_user(authorization)
 
     service = Service(
         master_id=current_user.tg_id,
@@ -81,12 +77,10 @@ async def create_service(
 async def update_service(
     service_id: int,
     payload: ServiceUpdate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Обновить услугу."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Service).where(
@@ -124,12 +118,10 @@ async def update_service(
 @router.delete("/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_service(
     service_id: int,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Удалить услугу."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Service).where(

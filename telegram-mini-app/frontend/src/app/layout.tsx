@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import Script from 'next/script'
 import './globals.css'
 import { Analytics } from '@vercel/analytics/react'
+import { Toaster } from '@/components/ui/toaster'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
@@ -43,9 +45,31 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <body className="font-sans antialiased">
+        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        <Script id="telegram-webapp-ready" strategy="afterInteractive">
+          {`
+            (function () {
+              var attempts = 0;
+              function markReady() {
+                var tg = window.Telegram && window.Telegram.WebApp;
+                if (!tg) {
+                  attempts += 1;
+                  if (attempts < 60) {
+                    window.setTimeout(markReady, 250);
+                  }
+                  return;
+                }
+                try { tg.ready(); } catch (e) {}
+                try { tg.expand(); } catch (e) {}
+              }
+              markReady();
+            })();
+          `}
+        </Script>
         {children}
+        <Toaster />
         <Analytics/>
       </body>
     </html>

@@ -8,9 +8,11 @@ from typing import Any, Dict
 from urllib.parse import parse_qsl
 
 import jwt
-from fastapi import HTTPException
+from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from common import settings
+from common import get_async_session, settings
 from common.models import User
 
 
@@ -35,7 +37,11 @@ def validate_telegram_init_data(init_data: str) -> Dict[str, Any]:
         f"{k}={v}" for k, v in sorted(data.items(), key=lambda x: x[0])
     )
 
-    secret_key = hashlib.sha256(settings.bot_token.encode()).digest()
+    secret_key = hmac.new(
+        b"WebAppData",
+        settings.bot_token.encode(),
+        hashlib.sha256,
+    ).digest()
     hmac_string = hmac.new(
         secret_key,
         msg=data_check_string.encode(),
@@ -72,7 +78,7 @@ def validate_telegram_init_data(init_data: str) -> Dict[str, Any]:
 def create_access_token(user: User) -> str:
     """Создать JWT access-токен для пользователя."""
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user.tg_id),
         "role": user.role.value,
@@ -83,21 +89,10 @@ def create_access_token(user: User) -> str:
     return token
 
 
-async def get_current_user(
-    authorization: str | None = None,
-) -> User:
-    """Получить текущего пользователя из JWT токена.
-
-    Используется как Depends в FastAPI для защиты роутов.
-    Фронтенд должен передавать заголовок: Authorization: Bearer <token>
-    """
-
-    from fastapi import HTTPException, status
-    from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    from common import get_async_session
-    from common.models import User
+def get_bearer_token(
+    authorization: str | None = Header(default=None),
+) -> str:
+    """Извлечь Bearer-токен из Authorization header."""
 
     if not authorization:
         raise HTTPException(
@@ -113,6 +108,12 @@ async def get_current_user(
             detail="Неверный формат Authorization заголовка",
         )
 
+    return token
+
+
+def decode_access_token(token: str) -> int:
+    """Декодировать JWT и вернуть Telegram ID пользователя."""
+
     # Декодируем JWT
     try:
         payload = jwt.decode(
@@ -120,23 +121,30 @@ async def get_current_user(
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
         )
-        tg_id = int(payload.get("sub"))
-    except (jwt.InvalidTokenError, (ValueError, TypeError)):
+        return int(payload.get("sub"))
+    except (jwt.InvalidTokenError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный или просроченный токен",
         )
 
+
+async def get_current_user(
+    token: str = Depends(get_bearer_token),
+    session: AsyncSession = Depends(get_async_session),
+) -> User:
+    """Получить текущего пользователя из JWT токена."""
+
+    tg_id = decode_access_token(token)
+
     # Ищем пользователя в БД
-    async with get_async_session().__anext__() as session:
-        result = await session.execute(select(User).where(User.tg_id == tg_id))
-        user = result.scalar_one_or_none()
+    result = await session.execute(select(User).where(User.tg_id == tg_id))
+    user = result.scalar_one_or_none()
 
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Пользователь не найден",
-            )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден",
+        )
 
-        return user
-
+    return user

@@ -18,7 +18,7 @@ interface SalonDashboardProps {
   onUpdateSalon: (salon: Salon) => void
   onRemoveMember: (memberId: string) => void
   onUpdateResource: (resource: Resource) => void
-  onAddResource: (resource: Resource) => void
+  onAddResource: (resource: { name: string; isActive: boolean }) => void
   onDeleteResource: (resourceId: string) => void
 }
 
@@ -36,7 +36,7 @@ export function SalonDashboard({
   const [activeTab, setActiveTab] = useState<"schedule" | "members" | "resources">("schedule")
 
   const handleCopyInvite = async () => {
-    await navigator.clipboard.writeText(`https://t.me/crmbot?start=${salon.inviteCode}`)
+    await navigator.clipboard.writeText(salon.inviteCode)
   }
 
   const tabs = [
@@ -66,7 +66,13 @@ export function SalonDashboard({
 
       {/* Табы */}
       <div className="px-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as "schedule" | "members" | "resources")
+          }
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-3 bg-secondary">
             <TabsTrigger value="schedule" className="text-xs">
               Расписание

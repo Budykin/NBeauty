@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 from datetime import time
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -29,12 +29,10 @@ def _parse_time(t: str) -> time:
 
 @router.get("/my", response_model=List[ScheduleOut])
 async def get_my_schedules(
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить расписание текущего мастера."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(MasterSchedule)
@@ -59,12 +57,10 @@ async def get_my_schedules(
 @router.post("/", response_model=ScheduleOut, status_code=status.HTTP_201_CREATED)
 async def create_schedule(
     payload: ScheduleCreate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Создать запись в расписании."""
-
-    current_user = await get_current_user(authorization)
 
     # Проверяем, нет ли уже записи для этого дня/салона
     existing = await session.execute(
@@ -107,12 +103,10 @@ async def create_schedule(
 async def update_schedule(
     schedule_id: int,
     payload: ScheduleCreate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Обновить запись в расписании."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(MasterSchedule).where(
@@ -152,12 +146,10 @@ async def update_schedule(
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_schedule(
     schedule_id: int,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Удалить запись из расписания."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(MasterSchedule).where(

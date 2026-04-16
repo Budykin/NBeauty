@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import MeOut, MeUpdate, BecomeMasterOut
@@ -24,14 +24,10 @@ async def get_me(
 @router.put("/me", response_model=MeOut)
 async def update_me(
     payload: MeUpdate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Обновить профиль текущего пользователя."""
-
-    from backend.app.core.auth import get_current_user as _get_user
-
-    current_user = await _get_user(authorization)
 
     # Обновляем поля
     update_data = payload.model_dump(exclude_unset=True)
@@ -47,7 +43,7 @@ async def update_me(
 
 @router.post("/me/become-master", response_model=BecomeMasterOut)
 async def become_master(
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Переключить роль пользователя на мастера.
@@ -58,8 +54,6 @@ async def become_master(
     - Настройка расписания
     - Управление салоном (если есть)
     """
-
-    current_user = await get_current_user(authorization)
 
     if current_user.role == UserRole.MASTER:
         return BecomeMasterOut(
@@ -79,7 +73,7 @@ async def become_master(
 
 @router.post("/me/switch-to-client", response_model=BecomeMasterOut)
 async def switch_to_client(
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Переключить роль обратно на клиента.
@@ -87,8 +81,6 @@ async def switch_to_client(
     Мастер может переключиться в режим клиента,
     чтобы записаться к другим мастерам.
     """
-
-    current_user = await get_current_user(authorization)
 
     if current_user.role == UserRole.CLIENT:
         return BecomeMasterOut(

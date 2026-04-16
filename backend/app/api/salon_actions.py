@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -41,12 +41,10 @@ async def _check_salon_admin(session: AsyncSession, user_id: int, salon_id: uuid
 @router.post("/create", response_model=SalonOut, status_code=status.HTTP_201_CREATED)
 async def create_salon(
     payload: SalonCreate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Создать новый салон. Создатель автоматически становится admin."""
-
-    current_user = await get_current_user(authorization)
 
     # Создаём салон
     salon = Salon(
@@ -89,12 +87,10 @@ async def create_salon(
 @router.post("/join", response_model=SalonOut)
 async def join_salon(
     payload: SalonJoin,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Вступить в салон по коду приглашения."""
-
-    current_user = await get_current_user(authorization)
 
     # Ищем салон по коду
     result = await session.execute(
@@ -169,12 +165,10 @@ async def join_salon(
 
 @router.get("/my", response_model=List[SalonOut])
 async def get_my_salons(
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить все салоны, где состоит текущий пользователь."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Salon)
@@ -221,16 +215,14 @@ async def get_my_salons(
     return response
 
 
-@router.delete("/salons/{salon_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{salon_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(
     salon_id: str,
     member_id: str,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Удалить участника из салона. Только для admin."""
-
-    current_user = await get_current_user(authorization)
     salon_uuid = uuid.UUID(salon_id)
     member_uuid = uuid.UUID(member_id)
 
@@ -261,4 +253,3 @@ async def remove_member(
 
     await session.delete(member)
     await session.commit()
-

@@ -4,12 +4,19 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import AnyUrl, Field
-from pydantic_settings import BaseSettings
+from pydantic import AliasChoices, AnyUrl, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Глобальные настройки проекта, общие для backend и бота."""
+
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("ENV_FILE", ".env"),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
 
     # Бот
     bot_token: str = Field(alias="BOT_TOKEN")
@@ -24,7 +31,10 @@ class Settings(BaseSettings):
 
     # WebApp / фронтенд
     webapp_url: str = Field(alias="WEBAPP_URL")
-    frontend_url: str = Field(alias="FRONTEND_URL", default="https://t.me/test_bot")
+    telegram_bot_url: str = Field(
+        default="https://t.me/test_bot",
+        validation_alias=AliasChoices("TELEGRAM_BOT_URL", "FRONTEND_URL"),
+    )
 
     # CORS
     cors_origins: List[str] = Field(
@@ -34,11 +44,11 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
 
-    class Config:
-        env_file = os.getenv("ENV_FILE", ".env")
-        env_file_encoding = "utf-8"
-        case_sensitive = True
-
+    # Локальные frontend/dev-переменные могут жить в общем .env,
+    # поэтому принимаем их здесь как необязательные, чтобы бот не падал.
+    next_public_api_url: str | None = Field(default=None, alias="NEXT_PUBLIC_API_URL")
+    backend_internal_url: str | None = Field(default=None, alias="BACKEND_INTERNAL_URL")
+    allowed_dev_origins: str | None = Field(default=None, alias="ALLOWED_DEV_ORIGINS")
 
 @lru_cache
 def get_settings() -> Settings:
@@ -48,4 +58,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-

@@ -121,13 +121,13 @@ export const MOCK_APPOINTMENTS: Appointment[] = [
 ]
 
 export const MOCK_WORKING_HOURS: WorkingHours[] = [
-  { day: "Понедельник", dayShort: "Пн", enabled: true, start: "09:00", end: "18:00" },
-  { day: "Вторник", dayShort: "Вт", enabled: true, start: "09:00", end: "18:00" },
-  { day: "Среда", dayShort: "Ср", enabled: true, start: "09:00", end: "18:00" },
-  { day: "Четверг", dayShort: "Чт", enabled: true, start: "09:00", end: "18:00" },
-  { day: "Пятница", dayShort: "Пт", enabled: true, start: "09:00", end: "17:00" },
-  { day: "Суббота", dayShort: "Сб", enabled: true, start: "10:00", end: "15:00" },
-  { day: "Воскресенье", dayShort: "Вс", enabled: false, start: "10:00", end: "15:00" },
+  { dayOfWeek: 0, day: "Понедельник", dayShort: "Пн", enabled: true, start: "09:00", end: "18:00" },
+  { dayOfWeek: 1, day: "Вторник", dayShort: "Вт", enabled: true, start: "09:00", end: "18:00" },
+  { dayOfWeek: 2, day: "Среда", dayShort: "Ср", enabled: true, start: "09:00", end: "18:00" },
+  { dayOfWeek: 3, day: "Четверг", dayShort: "Чт", enabled: true, start: "09:00", end: "18:00" },
+  { dayOfWeek: 4, day: "Пятница", dayShort: "Пт", enabled: true, start: "09:00", end: "17:00" },
+  { dayOfWeek: 5, day: "Суббота", dayShort: "Сб", enabled: true, start: "10:00", end: "15:00" },
+  { dayOfWeek: 6, day: "Воскресенье", dayShort: "Вс", enabled: false, start: "10:00", end: "15:00" },
 ]
 
 export const MOCK_SALONS: Salon[] = [

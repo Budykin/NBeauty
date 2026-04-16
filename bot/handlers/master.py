@@ -4,6 +4,7 @@ from aiogram.types import CallbackQuery
 from aiogram.filters import Command
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from common.db import get_async_session
 from common.models import Appointment, AppointmentStatus, User
@@ -29,7 +30,9 @@ async def on_confirm_appointment(callback: CallbackQuery):
     async for session in get_async_session():
         # Находим запись
         result = await session.execute(
-            select(Appointment).where(Appointment.id == appointment_id)
+            select(Appointment)
+            .options(selectinload(Appointment.service))
+            .where(Appointment.id == appointment_id)
         )
         appointment = result.scalar_one_or_none()
 
@@ -77,7 +80,7 @@ async def on_confirm_appointment(callback: CallbackQuery):
             await notify_appointment_confirmed(
                 client_tg_id=client.tg_id,
                 master_name=master.full_name,
-                service_name="Услуга",  # TODO: получить из appointment.service
+                service_name=appointment.service.name if appointment.service else "Услуга",
                 date_str=start_str,
                 start_time=start_str,
             )

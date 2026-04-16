@@ -46,6 +46,10 @@ class AppointmentStatus(str, enum.Enum):
     COMPLETED = "completed"
 
 
+def enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_cls]
+
+
 class User(Base):
     """Пользователь приложения.
 
@@ -60,7 +64,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", native_enum=False),
+        Enum(UserRole, name="user_role", native_enum=False, values_callable=enum_values),
         nullable=False,
         default=UserRole.CLIENT,
     )
@@ -133,6 +137,45 @@ class User(Base):
     )
 
 
+class LoginSessionStatus(str, enum.Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
+
+
+class TelegramLoginSession(Base):
+    """Одноразовая dev-сессия входа через Telegram-бота."""
+
+    __tablename__ = "telegram_login_sessions"
+
+    token: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[LoginSessionStatus] = mapped_column(
+        Enum(
+            LoginSessionStatus,
+            name="login_session_status",
+            native_enum=False,
+            values_callable=enum_values,
+        ),
+        nullable=False,
+        default=LoginSessionStatus.PENDING,
+    )
+    user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.tg_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[Optional[User]] = relationship(foreign_keys=[user_id])
+
+
 class Salon(Base):
     """Салон / коворкинг."""
 
@@ -175,10 +218,6 @@ class Salon(Base):
     )
     services: Mapped[List["Service"]] = relationship(back_populates="salon")
     appointments: Mapped[List["Appointment"]] = relationship(back_populates="salon")
-    platform_admins: Mapped[List["PlatformAdmin"]] = relationship(
-        back_populates="granted_by_user",
-        foreign_keys="PlatformAdmin.granted_by",
-    )
 
 
 class PlatformAdmin(Base):
@@ -208,7 +247,7 @@ class PlatformAdmin(Base):
         foreign_keys=[user_id],
     )
     granted_by_user: Mapped[Optional[User]] = relationship(
-        back_populates="platform_admins",
+        back_populates="granted_platform_admins",
         foreign_keys=[granted_by],
     )
 
@@ -234,7 +273,12 @@ class SalonMember(Base):
         nullable=False,
     )
     role: Mapped[SalonMemberRole] = mapped_column(
-        Enum(SalonMemberRole, name="salon_member_role", native_enum=False),
+        Enum(
+            SalonMemberRole,
+            name="salon_member_role",
+            native_enum=False,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=SalonMemberRole.MASTER,
     )
@@ -409,7 +453,12 @@ class Appointment(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[AppointmentStatus] = mapped_column(
-        Enum(AppointmentStatus, name="appointment_status", native_enum=False),
+        Enum(
+            AppointmentStatus,
+            name="appointment_status",
+            native_enum=False,
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=AppointmentStatus.PENDING,
     )

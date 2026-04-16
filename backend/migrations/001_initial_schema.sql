@@ -402,8 +402,18 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION recalculate_master_rating IS 'Пересчитывает средний рейтинг и количество отзывов мастера';
 
+CREATE OR REPLACE FUNCTION trigger_recalculate_master_rating()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM recalculate_master_rating(NEW.master_id);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION trigger_recalculate_master_rating IS 'Триггер-обёртка для пересчёта рейтинга мастера после изменения reviews';
+
 -- Триггер для авто-обновления рейтинга при добавлении/изменении отзыва
 CREATE OR REPLACE TRIGGER trigger_reviews_update_rating
     AFTER INSERT OR UPDATE ON reviews
     FOR EACH ROW
-    EXECUTE FUNCTION recalculate_master_rating(NEW.master_id);
+    EXECUTE FUNCTION trigger_recalculate_master_rating();

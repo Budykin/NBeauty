@@ -11,6 +11,8 @@ interface ProfileScreenProps {
   role: Role
   salons: Salon[]
   currentMasterId: string
+  currentUserName: string
+  currentUserSpecialty?: string
   onToggleRole: () => void
   onBecomeMaster: () => void
   onNavigate: (screen: "working-hours" | "salon-dashboard") => void
@@ -22,6 +24,8 @@ export function ProfileScreen({
   role,
   salons,
   currentMasterId,
+  currentUserName,
+  currentUserSpecialty,
   onToggleRole,
   onBecomeMaster,
   onNavigate,
@@ -32,6 +36,15 @@ export function ProfileScreen({
   const mySalons = salons.filter((s) =>
     s.members.some((m) => m.masterId === currentMasterId)
   )
+  const initials = currentUserName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "ВЫ"
+  const subtitle = isMaster
+    ? currentUserSpecialty || "Мастер"
+    : "Клиент"
 
   async function handleCreateSalon() {
     const name = prompt("Название салона:")
@@ -69,14 +82,14 @@ export function ProfileScreen({
         className="flex flex-col items-center gap-3 py-4"
       >
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
-          {isMaster ? "АП" : "ВЫ"}
+          {initials}
         </div>
         <div className="text-center">
           <h1 className="text-lg font-semibold text-foreground">
-            {isMaster ? "Анна Петрова" : "Мой аккаунт"}
+            {currentUserName}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {isMaster ? "Стилист-колорист" : "Клиент"}
+            {subtitle}
           </p>
         </div>
       </motion.div>

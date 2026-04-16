@@ -17,7 +17,7 @@ import type { Resource } from "@/lib/types"
 interface SalonResourcesPanelProps {
   resources: Resource[]
   onUpdateResource: (resource: Resource) => void
-  onAddResource: (resource: Resource) => void
+  onAddResource: (resource: { name: string; isActive: boolean }) => void
   onDeleteResource: (resourceId: string) => void
   salonId: string
 }
@@ -37,13 +37,10 @@ export function SalonResourcesPanel({
 
   const handleAdd = () => {
     if (!newResourceName.trim()) return
-    const newResource: Resource = {
-      id: `r-${Date.now()}`,
+    onAddResource({
       name: newResourceName.trim(),
-      salonId,
       isActive: true,
-    }
-    onAddResource(newResource)
+    })
     setNewResourceName("")
     setDrawerOpen(false)
   }

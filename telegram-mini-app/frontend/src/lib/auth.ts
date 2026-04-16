@@ -2,8 +2,23 @@
 // Auth слой — хранение JWT и Telegram initData
 // ============================================================================
 
+import type { ApiAuthResponse } from "./api"
+
 const TOKEN_KEY = "nbeauty_access_token"
 const INIT_DATA_KEY = "nbeauty_init_data"
+const LOGIN_SESSION_KEY = "nbeauty_login_session"
+
+type TelegramWebApp = {
+  initData?: string
+  initDataUnsafe?: {
+    user?: {
+      first_name?: string
+      last_name?: string
+    }
+  }
+  ready?: () => void
+  expand?: () => void
+}
 
 /** Сохранить JWT токен */
 export function setAccessToken(token: string): void {
@@ -30,9 +45,41 @@ export function getInitData(): string | null {
   return localStorage.getItem(INIT_DATA_KEY)
 }
 
+export function clearInitData(): void {
+  localStorage.removeItem(INIT_DATA_KEY)
+}
+
+export function setLoginSessionToken(token: string): void {
+  localStorage.setItem(LOGIN_SESSION_KEY, token)
+}
+
+export function getLoginSessionToken(): string | null {
+  return localStorage.getItem(LOGIN_SESSION_KEY)
+}
+
+export function clearLoginSessionToken(): void {
+  localStorage.removeItem(LOGIN_SESSION_KEY)
+}
+
+export function getTelegramWebApp(): TelegramWebApp | undefined {
+  return (window as Window & { Telegram?: { WebApp?: TelegramWebApp } }).Telegram?.WebApp
+}
+
+export function getTelegramInitData(): string | null {
+  return getTelegramWebApp()?.initData || getInitData()
+}
+
+export function persistAuth(response: ApiAuthResponse, initData?: string): void {
+  setAccessToken(response.accessToken)
+  if (initData) {
+    setInitData(initData)
+  }
+}
+
 /** Проверить, авторизован ли пользователь */
 export function isAuthenticated(): boolean {
-  return !!getAccessToken()
+  const token = getAccessToken()
+  return !!token && !isTokenExpired(token)
 }
 
 /** Проверить, истёк ли JWT токен (без decode) */
@@ -50,18 +97,19 @@ export function isTokenExpired(token: string): boolean {
 export async function refreshAuth(): Promise<string | null> {
   const { apiAuth } = await import("./api")
 
-  // Берём initData из Telegram WebApp или localStorage
-  const tg = (window as any).Telegram?.WebApp
-  const initData = tg?.initData || getInitData()
+  const initData = getTelegramInitData()
 
-  if (!initData) return null
+  if (!initData) {
+    clearAccessToken()
+    return null
+  }
 
   try {
     const res = await apiAuth.telegram(initData)
-    setAccessToken(res.accessToken)
-    setInitData(initData)
+    persistAuth(res, initData)
     return res.accessToken
   } catch {
+    clearAccessToken()
     return null
   }
 }

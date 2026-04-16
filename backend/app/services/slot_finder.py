@@ -57,7 +57,7 @@ async def find_slots_for_service(
             MasterSchedule.day_of_week == weekday,
         )
     )
-    if schedule is None:
+    if schedule is None or not schedule.is_enabled:
         return []
 
     # Рабочий интервал мастера в конкретный день
@@ -68,7 +68,7 @@ async def find_slots_for_service(
     base_filter = and_(
         Appointment.master_id == master_id,
         func.date(Appointment.start_time) == target_date,
-        Appointment.status != AppointmentStatus.CANCELED,
+        Appointment.status != AppointmentStatus.CANCELLED,
     )
 
     busy_appointments: list[Appointment] = list(
@@ -80,7 +80,7 @@ async def find_slots_for_service(
         resource_filter = and_(
             Appointment.resource_id == service.resource_id,
             func.date(Appointment.start_time) == target_date,
-            Appointment.status != AppointmentStatus.CANCELED,
+            Appointment.status != AppointmentStatus.CANCELLED,
         )
         resource_appointments = list(
             await session.scalars(select(Appointment).where(resource_filter))
@@ -115,4 +115,3 @@ async def find_slots_for_service(
         current_start += step
 
     return slots
-

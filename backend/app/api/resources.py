@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -74,14 +74,13 @@ async def get_salon_resources(
 async def create_resource(
     salon_id: str,
     payload: ResourceCreate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Создать новый ресурс салона. Только для admin."""
 
     import uuid
 
-    current_user = await get_current_user(authorization)
     await _check_salon_admin(session, current_user.tg_id, salon_id)
 
     resource = Resource(
@@ -105,12 +104,10 @@ async def create_resource(
 async def update_resource(
     resource_id: int,
     payload: ResourceUpdate,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Обновить ресурс салона. Только для admin."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Resource).where(Resource.id == resource_id)
@@ -144,12 +141,10 @@ async def update_resource(
 @router.delete("/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_resource(
     resource_id: int,
-    authorization: str = Header(...),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
     """Удалить ресурс салона. Только для admin."""
-
-    current_user = await get_current_user(authorization)
 
     result = await session.execute(
         select(Resource).where(Resource.id == resource_id)

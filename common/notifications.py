@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from .config import settings
 
 
-_bot = Bot(token=settings.bot_token, parse_mode="HTML")
+_bot = Bot(
+    token=settings.bot_token,
+    default=DefaultBotProperties(parse_mode="HTML"),
+)
 
 
 def _build_appointment_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
@@ -111,4 +115,3 @@ async def edit_appointment_notification(
     except Exception:
         # Сообщение могло быть уже удалено или изменено — игнорируем
         pass
-
