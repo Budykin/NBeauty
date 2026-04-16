@@ -6,6 +6,7 @@ const rawApiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "")
 const API_BASE = rawApiBase
   ? (rawApiBase.endsWith("/api") ? rawApiBase : `${rawApiBase}/api`)
   : "/api"
+const SHOULD_SKIP_NGROK_WARNING = Boolean(rawApiBase && /ngrok/i.test(rawApiBase))
 
 type RequestOptions = RequestInit & {
   withAuth?: boolean
@@ -37,6 +38,7 @@ async function request<T>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...(SHOULD_SKIP_NGROK_WARNING ? { "ngrok-skip-browser-warning": "true" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...Object.entries(fetchOptions.headers || {}).reduce((acc, [k, v]) => {
       if (typeof v === "string") acc[k] = v
