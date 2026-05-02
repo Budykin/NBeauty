@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn, Edit2 } from "lucide-react"
+import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { apiSalons } from "@/lib/api"
 import { mapSalons } from "@/lib/mappers"
@@ -106,14 +106,6 @@ export function ProfileScreen({
           </p>
         </div>
 
-        {/* Кнопка редактирования профиля */}
-        <button
-          onClick={() => onNavigate("edit-profile")}
-          className="mt-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-all hover:bg-primary/20 active:scale-[0.98]"
-        >
-          <Edit2 className="h-4 w-4" />
-          Редактировать
-        </button>
       </motion.div>
 
       {/* Переключатель ролей (для мастера) */}
@@ -268,15 +260,21 @@ export function ProfileScreen({
         className="flex flex-col gap-2"
       >
         <p className="text-xs font-medium text-muted-foreground">Общие</p>
-        <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3">
+        <button
+          onClick={() => onNavigate("edit-profile")}
+          className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98] hover:bg-accent"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">
               <Settings className="h-4 w-4 text-muted-foreground" />
             </div>
-            <span className="text-sm font-medium text-card-foreground">Настройки</span>
+            <div>
+              <span className="text-sm font-medium text-card-foreground">Настройки</span>
+              <p className="text-xs text-muted-foreground">Профиль, фото и специальность</p>
+            </div>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </div>
+        </button>
       </motion.div>
 
       {/* Инфо */}

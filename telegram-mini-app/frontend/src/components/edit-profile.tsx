@@ -26,6 +26,10 @@ export function EditProfile({
   const [avatar, setAvatar] = useState<string | undefined>(currentAvatar)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasChanges =
+    fullName.trim() !== currentName ||
+    specialty.trim() !== (currentSpecialty || "") ||
+    avatar !== currentAvatar
 
   const initials = fullName
     .split(" ")
@@ -158,8 +162,9 @@ export function EditProfile({
       <div className="flex flex-col gap-3">
         {/* ФИО */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-foreground">Полное имя</label>
+          <label htmlFor="full-name" className="text-sm font-medium text-foreground">Полное имя</label>
           <input
+            id="full-name"
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
@@ -175,8 +180,9 @@ export function EditProfile({
 
         {/* Специальность (для мастеров) */}
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-foreground">Специальность</label>
+          <label htmlFor="specialty" className="text-sm font-medium text-foreground">Специальность</label>
           <input
+            id="specialty"
             type="text"
             value={specialty}
             onChange={(e) => setSpecialty(e.target.value)}
@@ -206,11 +212,11 @@ export function EditProfile({
         </button>
         <button
           onClick={handleSave}
-          disabled={isLoading || fullName.trim() === currentName}
+          disabled={isLoading || !hasChanges}
           className={cn(
             "flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-all",
             "active:scale-[0.98] hover:bg-primary/90",
-            (isLoading || fullName.trim() === currentName) && "opacity-50 cursor-not-allowed",
+            (isLoading || !hasChanges) && "opacity-50 cursor-not-allowed",
           )}
         >
           {isLoading ? (
