@@ -28,6 +28,10 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
     return searchIndex.includes(deferredQuery)
   })
 
+  function isAvatarImage(value: string): boolean {
+    return value.startsWith("data:image/") || value.startsWith("http://") || value.startsWith("https://")
+  }
+
   return (
     <div className="flex flex-col gap-4 px-4 pb-4 pt-3">
       <div>
@@ -64,8 +68,16 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98]"
           >
             {/* Аватар */}
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              {master.avatar}
+            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {isAvatarImage(master.avatar) ? (
+                <img
+                  src={master.avatar}
+                  alt={master.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                master.avatar
+              )}
             </div>
 
             {/* Инфо */}
