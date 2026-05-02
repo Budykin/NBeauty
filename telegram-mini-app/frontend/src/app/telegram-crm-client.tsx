@@ -24,7 +24,7 @@ import {
   apiSchedules,
   apiServices,
 } from "@/lib/api"
-import { isAuthenticated } from "@/lib/auth"
+import { IS_DEV_AUTH_BYPASS, isAuthenticated } from "@/lib/auth"
 import {
   createDefaultWorkingHours,
   mapAppointment,
@@ -35,6 +35,14 @@ import {
   mapScheduleToHours,
   mapServices,
 } from "@/lib/mappers"
+import {
+  MOCK_APPOINTMENTS,
+  MOCK_MASTERS,
+  MOCK_RESOURCES,
+  MOCK_SALONS,
+  MOCK_SERVICES,
+  MOCK_WORKING_HOURS,
+} from "@/lib/mock-data"
 import type {
   Appointment,
   Master,
@@ -117,6 +125,29 @@ export default function TelegramCRMClient() {
 
   const loadAppData = useCallback(async () => {
     if (!isAuthenticated()) return
+
+    if (IS_DEV_AUTH_BYPASS) {
+      const isMasterAccount = role === "master"
+
+      setCurrentUserId(isMasterAccount ? "m1" : "c1")
+      setCurrentUserName(isMasterAccount ? "Анна Петрова" : "Ольга Козлова")
+      setCurrentUserSpecialty(isMasterAccount ? "Стилист-колорист" : undefined)
+      setScreen((current) => {
+        if (PRESERVED_SCREENS.has(current)) {
+          return current
+        }
+
+        return viewMode === "master" ? "dashboard" : "discovery"
+      })
+      setMasters(MOCK_MASTERS)
+      setSalons(isMasterAccount ? MOCK_SALONS : [])
+      setServices(isMasterAccount ? MOCK_SERVICES : [])
+      setResources(isMasterAccount ? MOCK_RESOURCES : [])
+      setWorkingHours(MOCK_WORKING_HOURS)
+      setAppointments(MOCK_APPOINTMENTS)
+      setDataError(null)
+      return
+    }
 
     setAppLoading(true)
     setDataError(null)
@@ -223,7 +254,7 @@ export default function TelegramCRMClient() {
     } finally {
       setAppLoading(false)
     }
-  }, [currentUserId, retryAuth, viewMode])
+  }, [currentUserId, retryAuth, role, viewMode])
 
   useEffect(() => {
     if (authState.status !== "ready" || !authState.auth) return
@@ -264,6 +295,20 @@ export default function TelegramCRMClient() {
   }, [])
 
   const handleBecomeMaster = useCallback(async () => {
+    if (IS_DEV_AUTH_BYPASS) {
+      setCurrentUserId("m1")
+      setCurrentUserName("Анна Петрова")
+      setCurrentUserSpecialty("Стилист-колорист")
+      setRole("master")
+      setViewMode("master")
+      setScreen("dashboard")
+      setSelectedSalon(null)
+      setSalons(MOCK_SALONS)
+      setServices(MOCK_SERVICES)
+      setResources(MOCK_RESOURCES)
+      return
+    }
+
     try {
       await apiProfile.becomeMaster()
       setRole("master")
@@ -278,6 +323,15 @@ export default function TelegramCRMClient() {
   }, [loadAppData])
 
   const handleCancelAppointment = useCallback(async (id: string) => {
+    if (IS_DEV_AUTH_BYPASS) {
+      setAppointments((previous) =>
+        previous.map((appointment) =>
+          appointment.id === id ? { ...appointment, status: "cancelled" } : appointment,
+        ),
+      )
+      return
+    }
+
     try {
       const cancelled = await apiAppointments.cancel(Number(id))
       const mapped = mapAppointment(cancelled)
@@ -297,6 +351,22 @@ export default function TelegramCRMClient() {
   }, [])
 
   const handleBookFromWizard = useCallback(async (appointment: Appointment) => {
+    if (IS_DEV_AUTH_BYPASS) {
+      setAppointments((previous) =>
+        dedupeAppointments([
+          ...previous,
+          {
+            ...appointment,
+            clientId: currentUserId,
+            clientName: currentUserName,
+          },
+        ]),
+      )
+      setScreen("my-bookings")
+      setSelectedMaster(null)
+      return
+    }
+
     try {
       const created = await apiAppointments.create({
         masterId: Number(appointment.masterId),
@@ -543,6 +613,7 @@ export default function TelegramCRMClient() {
               <motion.div key="profile" {...pageVariants} transition={{ duration: 0.2 }}>
                 <ProfileScreen
                   role={role}
+                  viewMode={viewMode}
                   salons={salons}
                   currentMasterId={currentUserId}
                   currentUserName={currentUserName}

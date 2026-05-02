@@ -8,6 +8,18 @@ const TOKEN_KEY = "nbeauty_access_token"
 const INIT_DATA_KEY = "nbeauty_init_data"
 const LOGIN_SESSION_KEY = "nbeauty_login_session"
 
+export const IS_DEV_AUTH_BYPASS =
+  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true"
+
+export const DEV_AUTH_RESPONSE: ApiAuthResponse = {
+  accessToken: "dev-auth-bypass",
+  tokenType: "bearer",
+  userId: 101,
+  fullName: "Ольга Козлова",
+  username: "dev",
+  role: "client",
+}
+
 type TelegramWebApp = {
   initData?: string
   initDataUnsafe?: {
@@ -78,6 +90,8 @@ export function persistAuth(response: ApiAuthResponse, initData?: string): void 
 
 /** Проверить, авторизован ли пользователь */
 export function isAuthenticated(): boolean {
+  if (IS_DEV_AUTH_BYPASS) return true
+
   const token = getAccessToken()
   return !!token && !isTokenExpired(token)
 }

@@ -12,6 +12,8 @@ import {
   getLoginSessionToken,
   getTelegramInitData,
   getTelegramWebApp,
+  DEV_AUTH_RESPONSE,
+  IS_DEV_AUTH_BYPASS,
   isAuthenticated,
   isTokenExpired,
   persistAuth,
@@ -145,6 +147,11 @@ export function useAuthSession() {
 
     const bootstrap = async () => {
       try {
+        if (IS_DEV_AUTH_BYPASS) {
+          setReady(DEV_AUTH_RESPONSE)
+          return
+        }
+
         for (let attempt = 0; attempt < TELEGRAM_BOOTSTRAP_ATTEMPTS && !cancelled; attempt += 1) {
           if (getTelegramWebApp() || getInitData() || getAccessToken()) {
             break

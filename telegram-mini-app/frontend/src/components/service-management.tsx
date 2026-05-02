@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { apiServices } from "@/lib/api"
+import { IS_DEV_AUTH_BYPASS } from "@/lib/auth"
 import type { Service, Resource } from "@/lib/types"
 
 interface ServiceManagementProps {
@@ -30,6 +31,18 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
   const [loading, setLoading] = useState<string | null>(null)
 
   async function handleAdd() {
+    if (IS_DEV_AUTH_BYPASS) {
+      const newService: Service = {
+        id: `dev-service-${Date.now()}`,
+        name: "Новая услуга",
+        price: 0,
+        duration: 30,
+      }
+      onUpdate([...services, newService])
+      setEditingId(newService.id)
+      return
+    }
+
     setLoading("add")
     try {
       const created = await apiServices.create({
@@ -69,6 +82,8 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
     )
 
     // Потом отправляем на сервер
+    if (IS_DEV_AUTH_BYPASS) return
+
     try {
       await apiServices.update(Number(id), apiData)
     } catch (err) {
@@ -77,6 +92,11 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
   }
 
   async function handleDelete(id: string) {
+    if (IS_DEV_AUTH_BYPASS) {
+      onUpdate(services.filter((s) => s.id !== id))
+      return
+    }
+
     setLoading(`delete-${id}`)
     try {
       await apiServices.delete(Number(id))
@@ -120,7 +140,15 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
           >
             {editingId === service.id ? (
               <div className="flex flex-col gap-2.5">
+                <label
+                  htmlFor={`service-${service.id}-name`}
+                  className="sr-only"
+                >
+                  Название услуги
+                </label>
                 <input
+                  id={`service-${service.id}-name`}
+                  name={`service-${service.id}-name`}
                   type="text"
                   value={service.name}
                   onChange={(e) => handleUpdate(service.id, "name", e.target.value)}
@@ -130,8 +158,15 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                 />
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <label className="mb-1 block text-[10px] font-medium text-muted-foreground">Цена (&#8381;)</label>
+                    <label
+                      htmlFor={`service-${service.id}-price`}
+                      className="mb-1 block text-[10px] font-medium text-muted-foreground"
+                    >
+                      Цена (&#8381;)
+                    </label>
                     <input
+                      id={`service-${service.id}-price`}
+                      name={`service-${service.id}-price`}
                       type="number"
                       value={service.price || ""}
                       onChange={(e) => handleUpdate(service.id, "price", Number(e.target.value))}
@@ -140,8 +175,15 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="mb-1 block text-[10px] font-medium text-muted-foreground">Длительность (мин)</label>
+                    <label
+                      htmlFor={`service-${service.id}-duration`}
+                      className="mb-1 block text-[10px] font-medium text-muted-foreground"
+                    >
+                      Длительность (мин)
+                    </label>
                     <input
+                      id={`service-${service.id}-duration`}
+                      name={`service-${service.id}-duration`}
                       type="number"
                       value={service.duration || ""}
                       onChange={(e) => handleUpdate(service.id, "duration", Number(e.target.value))}
@@ -155,7 +197,10 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                 {resources.length > 0 && (
                   <div>
                     <div className="mb-1 flex items-center gap-1">
-                      <label className="text-[10px] font-medium text-muted-foreground">
+                      <label
+                        htmlFor={`service-${service.id}-resource`}
+                        className="text-[10px] font-medium text-muted-foreground"
+                      >
                         Требуемый ресурс
                       </label>
                       <TooltipProvider>
@@ -177,7 +222,11 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                         handleUpdate(service.id, "resourceId", value === "none" ? undefined : value)
                       }
                     >
-                      <SelectTrigger className="w-full rounded-lg border border-border bg-background">
+                      <SelectTrigger
+                        id={`service-${service.id}-resource`}
+                        aria-label="Требуемый ресурс"
+                        className="w-full rounded-lg border border-border bg-background"
+                      >
                         <SelectValue placeholder="Не требуется" />
                       </SelectTrigger>
                       <SelectContent>

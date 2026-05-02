@@ -209,6 +209,7 @@ export function AddBookingDrawer({ open, onClose, services, selectedDate, onAdd 
                   </label>
                   <input
                     id="client-name"
+                    name="client-name"
                     type="text"
                     value={clientName}
                     onChange={(e) => setClientName(e.target.value)}

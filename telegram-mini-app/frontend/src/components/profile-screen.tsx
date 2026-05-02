@@ -9,6 +9,7 @@ import type { Role, Salon } from "@/lib/types"
 
 interface ProfileScreenProps {
   role: Role
+  viewMode: Role
   salons: Salon[]
   currentMasterId: string
   currentUserName: string
@@ -22,6 +23,7 @@ interface ProfileScreenProps {
 
 export function ProfileScreen({
   role,
+  viewMode,
   salons,
   currentMasterId,
   currentUserName,
@@ -32,7 +34,8 @@ export function ProfileScreen({
   onSelectSalon,
   onSalonsChange,
 }: ProfileScreenProps) {
-  const isMaster = role === "master"
+  const isMasterAccount = role === "master"
+  const isMasterWorkflow = viewMode === "master"
   const mySalons = salons.filter((s) =>
     s.members.some((m) => m.masterId === currentMasterId)
   )
@@ -42,7 +45,7 @@ export function ProfileScreen({
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() || "")
     .join("") || "ВЫ"
-  const subtitle = isMaster
+  const subtitle = isMasterAccount
     ? currentUserSpecialty || "Мастер"
     : "Клиент"
 
@@ -95,7 +98,7 @@ export function ProfileScreen({
       </motion.div>
 
       {/* Переключатель ролей (для мастера) */}
-      {isMaster && (
+      {isMasterAccount && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,17 +111,21 @@ export function ProfileScreen({
                 <ArrowLeftRight className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">Режим клиента</p>
-                <p className="text-xs text-muted-foreground">Записаться к мастеру</p>
+                <p className="text-sm font-medium text-foreground">
+                  {isMasterWorkflow ? "Workflow мастера" : "Workflow клиента"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isMasterWorkflow ? "Услуги, расписание и записи" : "Поиск мастеров и мои записи"}
+                </p>
               </div>
             </div>
-            <Switch checked={isMaster} onCheckedChange={onToggleRole} />
+            <Switch checked={isMasterWorkflow} onCheckedChange={onToggleRole} />
           </div>
         </motion.div>
       )}
 
       {/* Кнопка "Стать мастером" (для клиента) */}
-      {!isMaster && (
+      {!isMasterAccount && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -145,7 +152,7 @@ export function ProfileScreen({
       )}
 
       {/* Мои салоны */}
-      {isMaster && (
+      {isMasterAccount && isMasterWorkflow && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -211,7 +218,7 @@ export function ProfileScreen({
       )}
 
       {/* Настройки мастера */}
-      {isMaster && (
+      {isMasterAccount && isMasterWorkflow && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}

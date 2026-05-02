@@ -164,6 +164,8 @@ export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProp
                 {day.enabled ? (
                   <div className="flex flex-1 items-center gap-1.5">
                     <input
+                      id={`working-hours-${day.dayOfWeek}-start`}
+                      name={`working-hours-${day.dayOfWeek}-start`}
                       type="time"
                       value={day.start}
                       onChange={(event) => void handleTimeChange(index, "start", event.target.value)}
@@ -172,6 +174,8 @@ export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProp
                     />
                     <span className="text-xs text-muted-foreground">-</span>
                     <input
+                      id={`working-hours-${day.dayOfWeek}-end`}
+                      name={`working-hours-${day.dayOfWeek}-end`}
                       type="time"
                       value={day.end}
                       onChange={(event) => void handleTimeChange(index, "end", event.target.value)}

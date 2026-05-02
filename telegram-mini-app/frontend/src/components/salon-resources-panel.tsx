@@ -80,6 +80,8 @@ export function SalonResourcesPanel({
                 Название
               </label>
               <input
+                id="new-resource-name"
+                name="new-resource-name"
                 type="text"
                 value={newResourceName}
                 onChange={(e) => setNewResourceName(e.target.value)}
@@ -147,6 +149,8 @@ export function SalonResourcesPanel({
                 {editingId === resource.id ? (
                   <div className="flex items-center gap-2">
                     <input
+                      id={`resource-${resource.id}-name`}
+                      name={`resource-${resource.id}-name`}
                       type="text"
                       value={editingName}
                       onChange={(e) => setEditingName(e.target.value)}

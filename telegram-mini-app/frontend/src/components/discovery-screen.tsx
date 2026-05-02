@@ -42,6 +42,8 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
       {/* Строка поиска */}
       <div className="relative">
         <input
+          id="master-search"
+          name="master-search"
           type="text"
           placeholder="Поиск мастеров..."
           value={query}

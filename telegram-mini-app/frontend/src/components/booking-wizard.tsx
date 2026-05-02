@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { ChevronLeft, Check, Loader2, Star, CalendarDays, Clock as ClockIcon } from "lucide-react"
 
 import { apiMasters } from "@/lib/api"
+import { IS_DEV_AUTH_BYPASS } from "@/lib/auth"
 import type { Appointment, Master, Service } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -81,6 +82,17 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
       setSlotError(null)
 
       try {
+        if (IS_DEV_AUTH_BYPASS) {
+          setAvailableSlots([
+            { start: "09:00", end: "10:00" },
+            { start: "10:30", end: "11:30" },
+            { start: "12:00", end: "13:00" },
+            { start: "15:00", end: "16:00" },
+            { start: "17:00", end: "18:00" },
+          ])
+          return
+        }
+
         const slots = await apiMasters.slots(
           Number(master.id),
           Number(selectedService.id),
