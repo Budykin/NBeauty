@@ -24,10 +24,15 @@ const MONTHS_RU = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
 ]
-const WEEKDAYS_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 function getCalendarDays(year: number, month: number) {
-  const firstDay = new Date(year, month, 1).getDay()
+  // JavaScript getDay() возвращает 0-6 где 0=воскресенье, 6=суббота
+  // Нам нужно понедельник в начале (0), воскресенье в конце (6)
+  // Поэтому вычитаем 1 и берём модуль 7
+  let firstDay = new Date(year, month, 1).getDay() - 1
+  if (firstDay < 0) firstDay = 6 // Воскресенье это 6
+  
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const days: (number | null)[] = []
 
@@ -446,10 +451,10 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex flex-col gap-2"
+                    className="flex flex-col gap-3"
                   >
                     <p className="text-xs font-medium text-muted-foreground">Уточните время</p>
-                    <div className="flex gap-2 justify-center">
+                    <div className="flex gap-3 justify-center">
                       {generateAdjacentSlots(selectedSlot, availableSlots).map((slot) => {
                         const isSelected = selectedSlot.start === slot.start
                         const isAdjacent = selectedSlot.start !== slot.start
@@ -459,7 +464,7 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                             key={`${slot.start}-${slot.end}`}
                             onClick={() => setSelectedSlot(slot)}
                             className={cn(
-                              "rounded-lg border px-3 py-2 text-xs font-medium transition-all",
+                              "rounded-lg border px-4 py-3 text-sm font-medium transition-all",
                               isSelected
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-border bg-card text-foreground hover:bg-secondary",
