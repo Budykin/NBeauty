@@ -65,12 +65,25 @@ export function mapService(api: ApiService): Service {
 export function mapAppointment(
   api: ApiAppointment,
 ): Appointment {
-  // Извлекаем дату из startTime (ISO string → YYYY-MM-DD)
-  const start = new Date(api.startTime)
-  const end = new Date(api.endTime)
-  const dateStr = start.toISOString().split("T")[0]
+  // Извлекаем дату и время из ISO строки, не конвертируя в локальное время
+  // Это гарантирует, что время отображается как было отправлено от бэка
+  const startMatch = api.startTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  const endMatch = api.endTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+
+  if (!startMatch || !endMatch) {
+    throw new Error(`Invalid appointment time format: ${api.startTime} / ${api.endTime}`)
+  }
+
+  const [, startYear, startMonth, startDay, startHour, startMinute] = startMatch
+  const [, , , , endHour, endMinute] = endMatch
+
+  const dateStr = `${startYear}-${startMonth}-${startDay}`
+  const startTimeStr = `${startHour}:${startMinute}`
+  const endTimeStr = `${endHour}:${endMinute}`
 
   // Создаём заглушку Service из названия
+  const start = new Date(api.startTime)
+  const end = new Date(api.endTime)
   const service: Service = {
     id: "api-service",
     name: api.serviceName,
@@ -86,8 +99,8 @@ export function mapAppointment(
     masterName: api.masterName,
     service,
     date: dateStr,
-    startTime: start.toTimeString().slice(0, 5), // HH:MM
-    endTime: end.toTimeString().slice(0, 5),
+    startTime: startTimeStr,
+    endTime: endTimeStr,
     status: api.status === "cancelled" ? "cancelled"
       : api.status === "completed" ? "completed"
       : "upcoming",

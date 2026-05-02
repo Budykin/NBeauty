@@ -368,11 +368,25 @@ export default function TelegramCRMClient() {
     }
 
     try {
+      // Формируем ISO string с timezone браузера
+      // startTime уже имеет формат "14:00", date имеет "2026-05-02"
+      // Создаём временное Date только для получения timezone offset
+      const tempDate = new Date(`${appointment.date}T${appointment.startTime}:00`)
+      
+      // Вычисляем timezone offset (+03:00 или -05:00)
+      const offset = tempDate.getTimezoneOffset() // offset in minutes
+      const absOffset = Math.abs(offset)
+      const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, "0")
+      const offsetMinutes = String(absOffset % 60).padStart(2, "0")
+      const tzSign = offset <= 0 ? "+" : "-"
+      const tzString = `${tzSign}${offsetHours}:${offsetMinutes}`
+
+      // Отправляем с явной timezone информацией: 2026-05-02T14:00:00+03:00
       const created = await apiAppointments.create({
         masterId: Number(appointment.masterId),
         clientId: Number(currentUserId),
         serviceId: Number(appointment.service.id),
-        startTime: `${appointment.date}T${appointment.startTime}:00`,
+        startTime: `${appointment.date}T${appointment.startTime}:00${tzString}`,
       })
 
       setAppointments((previous) => dedupeAppointments([...previous, mapAppointment(created)]))

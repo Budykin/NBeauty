@@ -38,13 +38,25 @@ function getCalendarDays(year: number, month: number) {
 }
 
 function formatSlotTime(value: string) {
-  if (value.length >= 16) {
-    return value.slice(11, 16)
+  // Сначала попробуем извлечь время напрямую из ISO формата
+  // Форматы: "2026-05-02T14:00:00+03:00" или "2026-05-02T14:00:00Z"
+  const timeMatch = value.match(/T(\d{2}):(\d{2})/)
+  if (timeMatch) {
+    return `${timeMatch[1]}:${timeMatch[2]}`
   }
 
+  // Fallback - если это просто "HH:MM"
+  if (/^\d{2}:\d{2}$/.test(value)) {
+    return value
+  }
+
+  // Последний resort - парсим как Date (но это менее надёжно)
   const parsed = new Date(value)
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toTimeString().slice(0, 5)
+    // Извлекаем локальные часы и минуты, избегаем toTimeString() для consistency
+    const hours = String(parsed.getHours()).padStart(2, "0")
+    const minutes = String(parsed.getMinutes()).padStart(2, "0")
+    return `${hours}:${minutes}`
   }
 
   return value
