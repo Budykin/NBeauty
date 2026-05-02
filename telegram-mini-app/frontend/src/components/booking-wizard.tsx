@@ -62,6 +62,56 @@ function formatSlotTime(value: string) {
   return value
 }
 
+// Функция для добавления/вычитания минут к времени
+function addMinutesToTime(timeStr: string, minutes: number): string {
+  const [hours, mins] = timeStr.split(":").map(Number)
+  let totalMinutes = hours * 60 + mins + minutes
+  
+  // Обработка перехода через границы часов
+  const newHours = Math.floor(totalMinutes / 60) % 24
+  const newMins = totalMinutes % 60
+  
+  return `${String(newHours).padStart(2, "0")}:${String(newMins).padStart(2, "0")}`
+}
+
+// Функция для создания соседних слотов с шагом 10 минут
+function generateAdjacentSlots(
+  slot: TimeSlot,
+  allSlots: TimeSlot[],
+  stepMinutes: number = 10
+): TimeSlot[] {
+  const result: TimeSlot[] = []
+  const currentIndex = allSlots.findIndex(s => s.start === slot.start)
+  
+  if (currentIndex === -1) return [slot]
+  
+  const isFirst = currentIndex === 0
+  const isLast = currentIndex === allSlots.length - 1
+  
+  // Добавляем слот слева (если не первый)
+  if (!isFirst) {
+    const prevSlot: TimeSlot = {
+      start: addMinutesToTime(slot.start, -stepMinutes),
+      end: slot.start,
+    }
+    result.push(prevSlot)
+  }
+  
+  // Добавляем выбранный слот
+  result.push(slot)
+  
+  // Добавляем слот справа (если не последний)
+  if (!isLast) {
+    const nextSlot: TimeSlot = {
+      start: slot.end,
+      end: addMinutesToTime(slot.end, stepMinutes),
+    }
+    result.push(nextSlot)
+  }
+  
+  return result
+}
+
 export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
   const [step, setStep] = useState(0)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
@@ -372,21 +422,57 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
             ) : null}
 
             {!slotsLoading && availableSlots.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2">
-                {availableSlots.map((slot) => (
-                  <button
-                    key={`${slot.start}-${slot.end}`}
-                    onClick={() => setSelectedSlot(slot)}
-                    className={cn(
-                      "rounded-lg border py-2.5 text-sm font-medium transition-all",
-                      selectedSlot?.start === slot.start
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card text-foreground hover:bg-secondary",
-                    )}
+              <div className="flex flex-col gap-3">
+                {/* Основная сетка слотов */}
+                <div className="grid grid-cols-3 gap-2">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={`${slot.start}-${slot.end}`}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={cn(
+                        "rounded-lg border py-2.5 text-sm font-medium transition-all",
+                        selectedSlot?.start === slot.start
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-card text-foreground hover:bg-secondary",
+                      )}
+                    >
+                      {slot.start}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Уточненное время - соседние слоты с шагом 10 минут */}
+                {selectedSlot ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-col gap-2"
                   >
-                    {slot.start}
-                  </button>
-                ))}
+                    <p className="text-xs font-medium text-muted-foreground">Уточните время</p>
+                    <div className="flex gap-2 justify-center">
+                      {generateAdjacentSlots(selectedSlot, availableSlots).map((slot) => {
+                        const isSelected = selectedSlot.start === slot.start
+                        const isAdjacent = selectedSlot.start !== slot.start
+                        
+                        return (
+                          <button
+                            key={`${slot.start}-${slot.end}`}
+                            onClick={() => setSelectedSlot(slot)}
+                            className={cn(
+                              "rounded-lg border px-3 py-2 text-xs font-medium transition-all",
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-card text-foreground hover:bg-secondary",
+                              isAdjacent && "opacity-70 hover:opacity-100",
+                            )}
+                          >
+                            {slot.start}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </motion.div>
+                ) : null}
               </div>
             ) : null}
 
