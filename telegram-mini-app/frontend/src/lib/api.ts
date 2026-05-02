@@ -185,6 +185,7 @@ export interface ApiAuthResponse {
   userId: number
   fullName: string
   username?: string
+  avatar?: string
   role: "client" | "master"
 }
 

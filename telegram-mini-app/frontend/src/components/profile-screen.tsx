@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn } from "lucide-react"
+import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn, Edit2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { apiSalons } from "@/lib/api"
 import { mapSalons } from "@/lib/mappers"
@@ -14,9 +14,10 @@ interface ProfileScreenProps {
   currentMasterId: string
   currentUserName: string
   currentUserSpecialty?: string
+  currentUserAvatar?: string
   onToggleRole: () => void
   onBecomeMaster: () => void
-  onNavigate: (screen: "working-hours" | "salon-dashboard") => void
+  onNavigate: (screen: "working-hours" | "salon-dashboard" | "edit-profile") => void
   onSelectSalon: (salon: Salon) => void
   onSalonsChange: (salons: Salon[]) => void
 }
@@ -28,6 +29,7 @@ export function ProfileScreen({
   currentMasterId,
   currentUserName,
   currentUserSpecialty,
+  currentUserAvatar,
   onToggleRole,
   onBecomeMaster,
   onNavigate,
@@ -84,8 +86,16 @@ export function ProfileScreen({
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center gap-3 py-4"
       >
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary text-2xl font-bold text-primary-foreground">
-          {initials}
+        <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-bold text-primary-foreground">
+          {currentUserAvatar ? (
+            <img
+              src={currentUserAvatar}
+              alt="Аватар"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </div>
         <div className="text-center">
           <h1 className="text-lg font-semibold text-foreground">
@@ -95,6 +105,15 @@ export function ProfileScreen({
             {subtitle}
           </p>
         </div>
+
+        {/* Кнопка редактирования профиля */}
+        <button
+          onClick={() => onNavigate("edit-profile")}
+          className="mt-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-all hover:bg-primary/20 active:scale-[0.98]"
+        >
+          <Edit2 className="h-4 w-4" />
+          Редактировать
+        </button>
       </motion.div>
 
       {/* Переключатель ролей (для мастера) */}

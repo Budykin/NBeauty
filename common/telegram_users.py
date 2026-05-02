@@ -12,6 +12,7 @@ async def upsert_telegram_user(
     tg_id: int,
     full_name: str,
     username: str | None,
+    avatar: str | None = None,
 ) -> User:
     """Создать или обновить пользователя Telegram.
 
@@ -35,6 +36,7 @@ async def upsert_telegram_user(
             tg_id=tg_id,
             full_name=full_name or "Неизвестный пользователь",
             username=safe_username,
+            avatar=avatar,
             role=UserRole.CLIENT,
         )
         session.add(user)
@@ -44,6 +46,8 @@ async def upsert_telegram_user(
     user.full_name = full_name or user.full_name
     if safe_username is not None:
         user.username = safe_username
+    if user.avatar is None and avatar is not None:
+        user.avatar = avatar
 
     session.add(user)
     await session.flush()

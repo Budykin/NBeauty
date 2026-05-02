@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { BookingWizard } from "@/components/booking-wizard"
 import { DevLoginScreen } from "@/components/dev-login-screen"
 import { DiscoveryScreen } from "@/components/discovery-screen"
+import { EditProfile } from "@/components/edit-profile"
 import { MasterDashboard } from "@/components/master-dashboard"
 import { MyBookingsScreen } from "@/components/my-bookings"
 import { ProfileScreen } from "@/components/profile-screen"
@@ -63,6 +64,7 @@ const pageVariants = {
 
 const PRESERVED_SCREENS = new Set<Screen>([
   "profile",
+  "edit-profile",
   "booking-wizard",
   "my-bookings",
   "salon-dashboard",
@@ -101,6 +103,7 @@ export default function TelegramCRMClient() {
   const [currentUserId, setCurrentUserId] = useState<string>("client-self")
   const [currentUserName, setCurrentUserName] = useState("Мой аккаунт")
   const [currentUserSpecialty, setCurrentUserSpecialty] = useState<string | undefined>()
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [resources, setResources] = useState<Resource[]>([])
@@ -132,6 +135,7 @@ export default function TelegramCRMClient() {
       setCurrentUserId(isMasterAccount ? "m1" : "c1")
       setCurrentUserName(isMasterAccount ? "Анна Петрова" : "Ольга Козлова")
       setCurrentUserSpecialty(isMasterAccount ? "Стилист-колорист" : undefined)
+      setCurrentUserAvatar(undefined)
       setScreen((current) => {
         if (PRESERVED_SCREENS.has(current)) {
           return current
@@ -158,6 +162,7 @@ export default function TelegramCRMClient() {
       setCurrentUserId(String(me.tgId))
       setCurrentUserName(me.fullName)
       setCurrentUserSpecialty(me.specialty)
+      setCurrentUserAvatar(me.avatar)
       setRole(me.role as Role)
       setViewMode((current) => {
         if (me.role !== "master") {
@@ -632,11 +637,29 @@ export default function TelegramCRMClient() {
                   currentMasterId={currentUserId}
                   currentUserName={currentUserName}
                   currentUserSpecialty={currentUserSpecialty}
+                  currentUserAvatar={currentUserAvatar}
                   onToggleRole={handleToggleRole}
                   onBecomeMaster={handleBecomeMaster}
                   onNavigate={(nextScreen) => setScreen(nextScreen)}
                   onSelectSalon={handleSelectSalon}
                   onSalonsChange={setSalons}
+                />
+              </motion.div>
+            ) : null}
+
+            {screen === "edit-profile" ? (
+              <motion.div key="edit-profile" {...pageVariants} transition={{ duration: 0.2 }}>
+                <EditProfile
+                  currentName={currentUserName}
+                  currentSpecialty={currentUserSpecialty}
+                  currentAvatar={currentUserAvatar}
+                  onBack={() => setScreen("profile")}
+                  onSave={(name, specialty, avatar) => {
+                    setCurrentUserName(name)
+                    setCurrentUserSpecialty(specialty)
+                    setCurrentUserAvatar(avatar)
+                    setScreen("profile")
+                  }}
                 />
               </motion.div>
             ) : null}

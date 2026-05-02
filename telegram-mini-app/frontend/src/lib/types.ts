@@ -74,6 +74,7 @@ export type Screen =
   | "dashboard"
   | "services"
   | "profile"
+  | "edit-profile"
   | "add-booking"
   | "service-management"
   | "working-hours"

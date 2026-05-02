@@ -29,6 +29,7 @@ def _build_auth_response(user: User) -> AuthResponse:
         user_id=user.tg_id,
         full_name=user.full_name,
         username=user.username,
+        avatar=user.avatar,
         role=user.role,
     )
 
@@ -57,11 +58,14 @@ async def telegram_auth(
         full_name = f"{full_name} {last_name}"
     username = user_data.get("username")
 
+    photo_url = user_data.get("photo_url")
+
     user = await upsert_telegram_user(
         session,
         tg_id=tg_id,
         full_name=full_name,
         username=username,
+        avatar=photo_url,
     )
     await session.commit()
     await session.refresh(user)

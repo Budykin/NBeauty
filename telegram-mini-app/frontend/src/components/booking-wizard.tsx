@@ -108,7 +108,7 @@ function generateAdjacentSlots(
   // Добавляем слот справа (если не последний)
   if (!isLast) {
     const nextSlot: TimeSlot = {
-      start: slot.end,
+      start: addMinutesToTime(slot.start, stepMinutes),
       end: addMinutesToTime(slot.end, stepMinutes),
     }
     result.push(nextSlot)
