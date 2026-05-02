@@ -114,6 +114,9 @@ export function mapMaster(master: ApiMaster): Master {
       duration: service.duration,
       resourceId: service.resourceId ?? undefined,
     })),
+    workingHours: master.schedules
+      ? mergeSchedulesWithDefaultWeek(master.schedules)
+      : undefined,
     salonId: master.salonId ?? undefined,
   }
 }
@@ -164,6 +167,13 @@ export function mapScheduleToHours(api: ApiSchedule): WorkingHours {
     start: api.startTime,
     end: api.endTime,
   }
+}
+
+export function mergeSchedulesWithDefaultWeek(schedules: ApiSchedule[]): WorkingHours[] {
+  const defaults = createDefaultWorkingHours()
+  const byDay = new Map(schedules.map((schedule) => [schedule.dayOfWeek, mapScheduleToHours(schedule)]))
+
+  return defaults.map((defaultDay) => byDay.get(defaultDay.dayOfWeek) ?? defaultDay)
 }
 
 export function createDefaultWorkingHours(): WorkingHours[] {

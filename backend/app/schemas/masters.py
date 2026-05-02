@@ -12,6 +12,19 @@ class ServiceOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class ScheduleOut(BaseModel):
+    """Рабочий день мастера для календаря записи."""
+
+    id: int
+    day_of_week: int = Field(serialization_alias="dayOfWeek")
+    is_enabled: bool = Field(serialization_alias="isEnabled")
+    start_time: str = Field(serialization_alias="startTime")
+    end_time: str = Field(serialization_alias="endTime")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class MasterOut(BaseModel):
     """Карта мастера для фронтенда."""
     id: str
@@ -21,6 +34,7 @@ class MasterOut(BaseModel):
     rating: float
     review_count: int = Field(serialization_alias="reviewCount")
     services: List[ServiceOut]
+    schedules: List[ScheduleOut] = Field(default_factory=list)
     salon_id: str | None = Field(default=None, serialization_alias="salonId")
 
     model_config = ConfigDict(from_attributes=True)

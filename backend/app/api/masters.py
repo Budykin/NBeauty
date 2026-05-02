@@ -10,7 +10,8 @@ from common.models import User, UserRole
 from fastapi import APIRouter, Depends, HTTPException
 
 # Импортируем наши новые схемы
-from backend.app.schemas.masters import MasterOut, ServiceOut
+from backend.app.schemas.masters import MasterOut, ScheduleOut, ServiceOut
+from backend.app.services.default_schedules import ensure_default_master_schedules
 
 router = APIRouter()
 
@@ -37,6 +38,16 @@ def map_user_to_master_out(master: User) -> MasterOut:
                 resource_id=str(s.resource_id) if s.resource_id else None
             ) for s in master.services
         ],
+        schedules=[
+            ScheduleOut(
+                id=s.id,
+                day_of_week=s.day_of_week,
+                is_enabled=s.is_enabled,
+                start_time=s.start_time.strftime("%H:%M"),
+                end_time=s.end_time.strftime("%H:%M"),
+            )
+            for s in sorted(master.schedules, key=lambda schedule: schedule.day_of_week)
+        ],
         salon_id=primary_salon_id,
     )
 
@@ -45,11 +56,22 @@ def map_user_to_master_out(master: User) -> MasterOut:
 async def list_masters(session: AsyncSession = Depends(get_async_session)):
     query = (
         select(User)
-        .options(selectinload(User.services))
+        .options(selectinload(User.services), selectinload(User.schedules))
         .where(User.role == UserRole.MASTER)
     )
     result = await session.execute(query)
     masters_db = result.scalars().all()
+
+    schedules_created = False
+    for master in masters_db:
+        before_count = len(master.schedules)
+        schedules = await ensure_default_master_schedules(session, master.tg_id)
+        if len(schedules) != before_count:
+            schedules_created = True
+        master.schedules = schedules
+
+    if schedules_created:
+        await session.commit()
 
     return [map_user_to_master_out(m) for m in masters_db]
 
@@ -58,7 +80,7 @@ async def list_masters(session: AsyncSession = Depends(get_async_session)):
 async def get_master_details(master_id: int, session: AsyncSession = Depends(get_async_session)):
     query = (
         select(User)
-        .options(selectinload(User.services))
+        .options(selectinload(User.services), selectinload(User.schedules))
         .where(User.tg_id == master_id, User.role == UserRole.MASTER)
     )
     result = await session.execute(query)
@@ -69,5 +91,8 @@ async def get_master_details(master_id: int, session: AsyncSession = Depends(get
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Мастер не найден"
         )
+
+    master.schedules = await ensure_default_master_schedules(session, master.tg_id)
+    await session.commit()
 
     return map_user_to_master_out(master)

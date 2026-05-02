@@ -8,6 +8,7 @@ from sqlalchemy.future import select
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import ScheduleCreate, ScheduleOut
+from backend.app.services.default_schedules import ensure_default_master_schedules
 from common import get_async_session
 from common.models import MasterSchedule, User
 
@@ -34,12 +35,8 @@ async def get_my_schedules(
 ):
     """Получить расписание текущего мастера."""
 
-    result = await session.execute(
-        select(MasterSchedule)
-        .where(MasterSchedule.master_id == current_user.tg_id)
-        .order_by(MasterSchedule.day_of_week)
-    )
-    schedules = result.scalars().all()
+    schedules = await ensure_default_master_schedules(session, current_user.tg_id)
+    await session.commit()
 
     return [
         ScheduleOut(

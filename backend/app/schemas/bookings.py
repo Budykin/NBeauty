@@ -3,11 +3,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class BookingCreate(BaseModel):
     # Фронтенд присылает данные в camelCase
-    master_id: str = Field(alias="masterId")
-    service_id: str = Field(alias="serviceId")
+    master_id: int = Field(alias="masterId")
+    service_id: int = Field(alias="serviceId")
     start_time: datetime = Field(alias="startTime")
     # Пока клиент авторизацию не передает в заголовках, будем брать его ID из тела
-    client_id: str = Field(alias="clientId")
+    client_id: int = Field(alias="clientId")
 
 class BookingOut(BaseModel):
     id: str

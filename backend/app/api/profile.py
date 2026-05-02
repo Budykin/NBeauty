@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import MeOut, MeUpdate, BecomeMasterOut
+from backend.app.services.default_schedules import ensure_default_master_schedules
 from common import get_async_session
 from common.models import User, UserRole
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +57,8 @@ async def become_master(
     """
 
     if current_user.role == UserRole.MASTER:
+        await ensure_default_master_schedules(session, current_user.tg_id)
+        await session.commit()
         return BecomeMasterOut(
             role="master",
             message="Вы уже мастер",
@@ -63,6 +66,7 @@ async def become_master(
 
     current_user.role = UserRole.MASTER
     session.add(current_user)
+    await ensure_default_master_schedules(session, current_user.tg_id)
     await session.commit()
 
     return BecomeMasterOut(

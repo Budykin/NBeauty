@@ -9,9 +9,10 @@ from sqlalchemy import and_, or_
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import AppointmentOut
 from common.db import get_async_session
-from common.models import Appointment, Service, AppointmentStatus, User
+from common.models import Appointment, MasterSchedule, Service, AppointmentStatus, User
 from common.notifications import notify_appointment_created
 from backend.app.schemas.bookings import BookingCreate
+from backend.app.services.default_schedules import ensure_default_master_schedules
 
 router = APIRouter()
 
@@ -32,14 +33,30 @@ async def create_booking(
     if not service:
         raise HTTPException(status_code=404, detail="Услуга не найдена")
 
-    if int(payload.master_id) != service.master_id:
+    if payload.master_id != service.master_id:
         raise HTTPException(status_code=400, detail="Услуга не принадлежит выбранному мастеру")
 
-    if int(payload.client_id) != current_user.tg_id:
+    if payload.client_id != current_user.tg_id:
         raise HTTPException(status_code=403, detail="Нельзя создать запись от имени другого клиента")
 
     # 2. Вычисляем время окончания на основе длительности услуги
     end_time = payload.start_time + timedelta(minutes=service.duration)
+
+    await ensure_default_master_schedules(session, service.master_id)
+    await session.commit()
+
+    schedule = await session.scalar(
+        select(MasterSchedule).where(
+            MasterSchedule.master_id == service.master_id,
+            MasterSchedule.salon_id.is_(None),
+            MasterSchedule.day_of_week == payload.start_time.weekday(),
+        )
+    )
+    if schedule is None or not schedule.is_enabled:
+        raise HTTPException(status_code=400, detail="Мастер не работает в выбранный день")
+
+    if payload.start_time.time() < schedule.start_time or end_time.time() > schedule.end_time:
+        raise HTTPException(status_code=400, detail="Выбранное время вне рабочего графика мастера")
 
     # 3. ПРОВЕРКИ КОНФЛИКТОВ
     busy_target_filter = Appointment.master_id == payload.master_id

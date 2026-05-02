@@ -170,6 +170,7 @@ export interface ApiMaster {
   rating: number
   reviewCount: number
   services: ApiMasterService[]
+  schedules?: ApiSchedule[]
   salonId?: string
 }
 
@@ -279,7 +280,7 @@ export const apiMasters = {
       date,
       stepMinutes: String(stepMinutes),
     })
-    return request<ApiTimeSlot[]>(`/masters/${masterId}/slots?${params}`)
+    return request<ApiTimeSlot[]>(`/appointments/${masterId}/slots?${params}`)
   },
 }
 

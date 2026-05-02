@@ -32,7 +32,7 @@ import {
   mapMasters,
   mapResource,
   mapSalons,
-  mapScheduleToHours,
+  mergeSchedulesWithDefaultWeek,
   mapServices,
 } from "@/lib/mappers"
 import {
@@ -228,7 +228,7 @@ export default function TelegramCRMClient() {
       }
 
       if (schedulesResult.status === "fulfilled" && schedulesResult.value.length > 0) {
-        setWorkingHours(schedulesResult.value.map(mapScheduleToHours))
+        setWorkingHours(mergeSchedulesWithDefaultWeek(schedulesResult.value))
       } else {
         setWorkingHours(createDefaultWorkingHours())
       }
@@ -372,7 +372,7 @@ export default function TelegramCRMClient() {
         masterId: Number(appointment.masterId),
         clientId: Number(currentUserId),
         serviceId: Number(appointment.service.id),
-        startTime: new Date(`${appointment.date}T${appointment.startTime}`).toISOString(),
+        startTime: `${appointment.date}T${appointment.startTime}:00`,
       })
 
       setAppointments((previous) => dedupeAppointments([...previous, mapAppointment(created)]))

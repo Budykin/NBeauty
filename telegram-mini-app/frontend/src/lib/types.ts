@@ -37,6 +37,7 @@ export interface Master {
   rating: number
   reviewCount: number
   services: Service[]
+  workingHours?: WorkingHours[]
   salonId?: string
 }
 

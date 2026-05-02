@@ -8,6 +8,7 @@ from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.models import Appointment, AppointmentStatus, MasterSchedule, Service
+from backend.app.services.default_schedules import ensure_default_master_schedules
 
 
 @dataclass
@@ -22,6 +23,10 @@ def _overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: date
     """Проверка пересечения двух интервалов времени."""
 
     return max(a_start, b_start) < min(a_end, b_end)
+
+
+def _as_local_naive(value: datetime) -> datetime:
+    return value.replace(tzinfo=None)
 
 
 async def find_slots_for_service(
@@ -50,6 +55,8 @@ async def find_slots_for_service(
         return []
 
     weekday = target_date.weekday()  # 0=понедельник
+    await ensure_default_master_schedules(session, master_id)
+    await session.commit()
 
     schedule: MasterSchedule | None = await session.scalar(
         select(MasterSchedule).where(
@@ -90,7 +97,8 @@ async def find_slots_for_service(
     # Убираем дубликаты по id
     unique_by_id: dict[int, Appointment] = {a.id: a for a in busy_appointments}
     busy_intervals = [
-        (appt.start_time, appt.end_time) for appt in sorted(unique_by_id.values(), key=lambda a: a.start_time)
+        (_as_local_naive(appt.start_time), _as_local_naive(appt.end_time))
+        for appt in sorted(unique_by_id.values(), key=lambda a: a.start_time)
     ]
 
     duration = timedelta(minutes=service.duration)

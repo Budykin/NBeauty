@@ -66,9 +66,13 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
   const selectedDateString = selectedDate
     ? `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
     : null
+  const selectedWorkingDay = selectedDate
+    ? master.workingHours?.find((day) => day.dayOfWeek === ((selectedDate.getDay() + 6) % 7))
+    : undefined
+  const selectedDateIsWorking = selectedWorkingDay?.enabled ?? true
 
   useEffect(() => {
-    if (!selectedService || !selectedDateString) {
+    if (!selectedService || !selectedDateString || !selectedDateIsWorking) {
       setAvailableSlots([])
       setSelectedSlot(null)
       setSlotError(null)
@@ -124,13 +128,18 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
     return () => {
       cancelled = true
     }
-  }, [master.id, selectedDateString, selectedService])
+  }, [master.id, selectedDateIsWorking, selectedDateString, selectedService])
 
   function isDateDisabled(day: number) {
     const date = new Date(viewYear, viewMonth, day)
     const cutoff = new Date()
     cutoff.setHours(0, 0, 0, 0)
-    return date < cutoff
+    if (date < cutoff) return true
+
+    const workingDay = master.workingHours?.find(
+      (hours) => hours.dayOfWeek === ((date.getDay() + 6) % 7),
+    )
+    return workingDay ? !workingDay.enabled : false
   }
 
   function handleBook() {
@@ -344,7 +353,9 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
 
             {!slotsLoading && !slotError && availableSlots.length === 0 ? (
               <div className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
-                На выбранную дату нет свободных слотов.
+                {selectedDateIsWorking
+                  ? "На выбранную дату нет свободных слотов."
+                  : "Мастер не работает в выбранный день."}
               </div>
             ) : null}
 

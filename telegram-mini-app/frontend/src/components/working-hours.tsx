@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import { ChevronLeft, Loader2 } from "lucide-react"
 
 import { apiSchedules, type ApiSchedule } from "@/lib/api"
-import { createDefaultWorkingHours, mapScheduleToHours } from "@/lib/mappers"
+import { createDefaultWorkingHours, mapScheduleToHours, mergeSchedulesWithDefaultWeek } from "@/lib/mappers"
 import type { WorkingHours as WorkingHoursType } from "@/lib/types"
 import { Switch } from "@/components/ui/switch"
 
@@ -44,7 +44,7 @@ export function WorkingHoursScreen({ hours, onUpdate, onBack }: WorkingHoursProp
 
         onUpdate(
           schedules.length > 0
-            ? schedules.map(mapScheduleToHours)
+            ? mergeSchedulesWithDefaultWeek(schedules)
             : createDefaultWorkingHours(),
         )
         setLoaded(true)

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { UserPlus, Trash2, Crown, QrCode, X, Share2 } from "lucide-react"
+import { UserPlus, Trash2, Crown, X, Share2 } from "lucide-react"
 import {
   Drawer,
   DrawerContent,
@@ -37,18 +37,10 @@ export function SalonMembersPanel({ salon, onRemoveMember, onCopyInvite }: Salon
             <DrawerTitle>Пригласить мастера</DrawerTitle>
           </DrawerHeader>
           <div className="flex flex-col gap-4 px-4 pb-8">
-            {/* QR код (placeholder) */}
-            <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl border border-border bg-card">
-              <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                <QrCode className="h-16 w-16" />
-                <span className="text-xs">QR-код приглашения</span>
-              </div>
-            </div>
-
             {/* Код и ссылка */}
             <div className="rounded-xl border border-border bg-secondary/50 p-4 text-center">
               <p className="text-xs text-muted-foreground">Код приглашения</p>
-              <p className="mt-1 text-2xl font-bold tracking-widest text-foreground">
+              <p className="mt-2 break-all rounded-lg bg-background px-3 py-2 font-mono text-base font-semibold leading-6 text-foreground">
                 {salon.inviteCode}
               </p>
             </div>
