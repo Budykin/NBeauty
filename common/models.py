@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     Time,
     UniqueConstraint,
 )
@@ -69,7 +70,7 @@ class User(Base):
         default=UserRole.CLIENT,
     )
 
-    avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    avatar: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     specialty: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     rating: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
