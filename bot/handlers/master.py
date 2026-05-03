@@ -76,13 +76,14 @@ async def on_confirm_appointment(callback: CallbackQuery):
 
         # Отправляем клиенту уведомление
         if master and client:
-            start_str = appointment.start_time.strftime("%d.%m.%Y %H:%M")
+            date_str = appointment.start_time.strftime("%d.%m.%Y")
+            time_str = appointment.start_time.strftime("%H:%M")
             await notify_appointment_confirmed(
                 client_tg_id=client.tg_id,
                 master_name=master.full_name,
                 service_name=appointment.service.name if appointment.service else "Услуга",
-                date_str=start_str,
-                start_time=start_str,
+                date_str=date_str,
+                start_time=time_str,
             )
 
         await callback.answer("✅ Запись подтверждена!", show_alert=True)

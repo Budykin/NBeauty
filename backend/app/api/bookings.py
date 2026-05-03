@@ -25,6 +25,11 @@ async def create_booking(
 ):
     """Создать новую запись с проверкой доступности времени и кабинета."""
 
+    # Фронт может прислать ISO с таймзоной (например, 2026-05-02T12:00:00+03:00).
+    # В нашей модели хранения/слотов время используется как "локальное на часах" (naive datetime),
+    # поэтому сохраняем часы/минуты как есть и игнорируем tzinfo, чтобы не было сдвига в UTC.
+    start_time = payload.start_time.replace(tzinfo=None) if payload.start_time.tzinfo else payload.start_time
+
     # 1. Находим услугу, чтобы узнать её длительность и нужен ли ей кабинет (resource_id)
     service_query = select(Service).where(Service.id == payload.service_id)
     service_result = await session.execute(service_query)
@@ -40,7 +45,7 @@ async def create_booking(
         raise HTTPException(status_code=403, detail="Нельзя создать запись от имени другого клиента")
 
     # 2. Вычисляем время окончания на основе длительности услуги
-    end_time = payload.start_time + timedelta(minutes=service.duration)
+    end_time = start_time + timedelta(minutes=service.duration)
 
     await ensure_default_master_schedules(session, service.master_id)
     await session.commit()
@@ -55,7 +60,7 @@ async def create_booking(
     if schedule is None or not schedule.is_enabled:
         raise HTTPException(status_code=400, detail="Мастер не работает в выбранный день")
 
-    if payload.start_time.time() < schedule.start_time or end_time.time() > schedule.end_time:
+    if start_time.time() < schedule.start_time or end_time.time() > schedule.end_time:
         raise HTTPException(status_code=400, detail="Выбранное время вне рабочего графика мастера")
 
     # 3. ПРОВЕРКИ КОНФЛИКТОВ
@@ -71,7 +76,7 @@ async def create_booking(
             Appointment.status != AppointmentStatus.CANCELLED,
             busy_target_filter,
             Appointment.start_time < end_time,
-            Appointment.end_time > payload.start_time,
+            Appointment.end_time > start_time,
         )
     )
 
@@ -89,7 +94,7 @@ async def create_booking(
         salon_id=service.salon_id,
         service_id=payload.service_id,
         resource_id=service.resource_id,
-        start_time=payload.start_time,
+        start_time=start_time,
         end_time=end_time,
         status=AppointmentStatus.PENDING
     )
@@ -105,14 +110,15 @@ async def create_booking(
     master = master_result.scalar_one_or_none()
 
     if master:
-        start_str = new_appointment.start_time.strftime("%d.%m.%Y %H:%M")
+        date_str = new_appointment.start_time.strftime("%d.%m.%Y")
+        time_str = new_appointment.start_time.strftime("%H:%M")
         asyncio.create_task(
             notify_appointment_created(
                 master_tg_id=master.tg_id,
                 client_name=current_user.full_name,
                 service_name=service.name,
-                date_str=start_str,
-                start_time=start_str,
+                date_str=date_str,
+                start_time=time_str,
                 appointment_id=new_appointment.id,
             )
         )

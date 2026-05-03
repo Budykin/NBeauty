@@ -194,14 +194,15 @@ async def cancel_appointment(
         client = client_result.scalar_one_or_none()
 
         if master and client and appointment.service:
-            start_str = appointment.start_time.strftime("%d.%m.%Y %H:%M")
+            date_str = appointment.start_time.strftime("%d.%m.%Y")
+            time_str = appointment.start_time.strftime("%H:%M")
             asyncio.create_task(
                 notify_appointment_cancelled(
                     master_tg_id=master.tg_id,
                     client_name=client.full_name,
                     service_name=appointment.service.name,
-                    date_str=start_str,
-                    start_time=start_str,
+                    date_str=date_str,
+                    start_time=time_str,
                 )
             )
 
