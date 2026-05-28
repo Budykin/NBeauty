@@ -115,13 +115,10 @@ export function mapMaster(master: ApiMaster): Master {
   return {
     id: master.id,
     name: master.name,
-    username: master.username,
-    telegramId: master.telegramId,
     avatar: master.avatar || master.name.slice(0, 2).toUpperCase(),
     specialty: master.specialty || "Мастер",
     rating: master.rating,
     reviewCount: master.reviewCount,
-    recentReviews: master.recentReviews ?? [],
     services: master.services.map((service) => ({
       id: service.id,
       name: service.name,

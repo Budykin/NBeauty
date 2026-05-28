@@ -35,29 +35,6 @@ def _build_appointment_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def build_review_rating_keyboard(appointment_id: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        *[
-            InlineKeyboardButton(
-                text=str(rating),
-                callback_data=f"apt_rate:{appointment_id}:{rating}",
-            )
-            for rating in range(1, 6)
-        ]
-    )
-    return builder.as_markup()
-
-
-def build_review_comment_keyboard(review_id: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(text="Написать отзыв", callback_data=f"review_comment:{review_id}"),
-        InlineKeyboardButton(text="В другой раз", callback_data=f"review_later:{review_id}"),
-    )
-    return builder.as_markup()
-
-
 def _safe(value: str | None) -> str:
     return escape(value or "", quote=True)
 
@@ -180,20 +157,6 @@ async def notify_appointment_cancelled_for_client(
     )
 
     await _bot.send_message(chat_id=client_tg_id, text=text)
-
-
-async def notify_review_request(
-    *,
-    client_tg_id: int,
-    appointment_id: int,
-) -> None:
-    """Ask a client to rate a completed appointment."""
-
-    await _bot.send_message(
-        chat_id=client_tg_id,
-        text="Ваша запись завершена. Понравилась ли вам услуга?",
-        reply_markup=build_review_rating_keyboard(appointment_id),
-    )
 
 
 async def edit_appointment_notification(
