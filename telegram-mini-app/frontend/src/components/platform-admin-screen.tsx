@@ -2,34 +2,39 @@
 
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import { ArrowLeft, Building2, CalendarDays, Star, Trash2 } from "lucide-react"
+import {
+  ArrowLeft,
+  Building2,
+  CalendarDays,
+  ClipboardList,
+  ShieldCheck,
+  Star,
+  Trash2,
+  UserCheck,
+  Users,
+} from "lucide-react"
 
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { AppointmentStatus } from "@/lib/appointment-status"
 import {
   apiPlatformAdmin,
   type ApiAdminAnalytics,
   type ApiAdminSalon,
   type ApiAdminUser,
-  type ApiAppointment,
-  type ApiResource,
-  type ApiReview,
-  type ApiService,
 } from "@/lib/api"
 
 interface PlatformAdminScreenProps {
   onBack: () => void
 }
 
+type StatusKey = AppointmentStatus
+
 export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
   const [analytics, setAnalytics] = useState<ApiAdminAnalytics | null>(null)
   const [users, setUsers] = useState<ApiAdminUser[]>([])
   const [salons, setSalons] = useState<ApiAdminSalon[]>([])
-  const [appointments, setAppointments] = useState<ApiAppointment[]>([])
-  const [reviews, setReviews] = useState<ApiReview[]>([])
-  const [resources, setResources] = useState<ApiResource[]>([])
-  const [services, setServices] = useState<ApiService[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -37,31 +42,15 @@ export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
     setLoading(true)
     setError(null)
     try {
-      const [
-        analyticsResult,
-        usersResult,
-        salonsResult,
-        appointmentsResult,
-        reviewsResult,
-        resourcesResult,
-        servicesResult,
-      ] = await Promise.all([
+      const [analyticsResult, usersResult, salonsResult] = await Promise.all([
         apiPlatformAdmin.analytics(),
         apiPlatformAdmin.users(),
         apiPlatformAdmin.salons(),
-        apiPlatformAdmin.appointments(),
-        apiPlatformAdmin.reviews(),
-        apiPlatformAdmin.resources(),
-        apiPlatformAdmin.services(),
       ])
 
       setAnalytics(analyticsResult)
       setUsers(usersResult)
       setSalons(salonsResult)
-      setAppointments(appointmentsResult)
-      setReviews(reviewsResult)
-      setResources(resourcesResult)
-      setServices(servicesResult)
     } catch (err) {
       console.error("Load platform admin data failed:", err)
       setError("Не удалось загрузить админ-данные")
@@ -91,18 +80,119 @@ export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
     await loadAdminData()
   }
 
-  const statCards = analytics
-    ? [
-        ["Пользователи", analytics.totals.users],
-        ["Клиенты", analytics.totals.clients],
-        ["Мастера", analytics.totals.masters],
-        ["Админы", analytics.totals.activePlatformAdmins],
-        ["Салоны", analytics.totals.salons],
-        ["Записи", analytics.totals.appointments],
-        ["Отзывы", analytics.totals.reviews],
-        ["Средний рейтинг", analytics.averageMasterRating],
-      ]
-    : []
+  const totals: Record<string, number> = analytics?.totals ?? {}
+  const appointmentsByStatus: Partial<Record<StatusKey, number>> = analytics?.appointmentsByStatus ?? {}
+  const totalUsers = totals.users ?? 0
+  const clients = totals.clients ?? 0
+  const masters = totals.masters ?? 0
+  const activePlatformAdmins = totals.activePlatformAdmins ?? 0
+  const totalAppointmentsFromStatuses = Object.values(appointmentsByStatus).reduce((sum, count) => sum + count, 0)
+  const totalAppointments = totalAppointmentsFromStatuses || totals.appointments || 0
+  const pendingAppointments = appointmentsByStatus.pending ?? 0
+  const confirmedAppointments = appointmentsByStatus.confirmed ?? 0
+  const upcomingAppointments = appointmentsByStatus.upcoming ?? 0
+  const cancelledAppointments = appointmentsByStatus.cancelled ?? 0
+  const completedAppointments = appointmentsByStatus.completed ?? 0
+  const activeAppointments = pendingAppointments + confirmedAppointments + upcomingAppointments
+  const cancellationRate = Math.round((cancelledAppointments / (totalAppointments || 1)) * 100)
+  const averageMasterRating = analytics?.averageMasterRating ?? 0
+
+  const overviewCards = [
+    {
+      label: "Пользователи",
+      value: totals.users ?? 0,
+      subtitle: "всего",
+      icon: <Users className="h-4 w-4" />,
+    },
+    {
+      label: "Клиенты",
+      value: totals.clients ?? 0,
+      subtitle: "всего",
+      icon: <UserCheck className="h-4 w-4" />,
+    },
+    {
+      label: "Мастера",
+      value: totals.masters ?? 0,
+      subtitle: "активных",
+      icon: <Star className="h-4 w-4" />,
+    },
+    {
+      label: "Админы",
+      value: totals.activePlatformAdmins ?? 0,
+      subtitle: "активных",
+      icon: <ShieldCheck className="h-4 w-4" />,
+    },
+    {
+      label: "Салоны",
+      value: totals.salons ?? 0,
+      subtitle: "всего",
+      icon: <Building2 className="h-4 w-4" />,
+    },
+    {
+      label: "Записи",
+      value: totals.appointments ?? 0,
+      subtitle: "всего",
+      icon: <CalendarDays className="h-4 w-4" />,
+    },
+    {
+      label: "Отзывы",
+      value: totals.reviews ?? 0,
+      subtitle: "всего",
+      icon: <ClipboardList className="h-4 w-4" />,
+    },
+    {
+      label: "Средний рейтинг",
+      value: formatRating(averageMasterRating),
+      subtitle: "среднее",
+      icon: <Star className="h-4 w-4" />,
+    },
+  ]
+
+  const roleMetrics = [
+    { label: "Клиенты", value: clients, percent: getPercent(clients, totalUsers) },
+    { label: "Мастера", value: masters, percent: getPercent(masters, totalUsers) },
+    { label: "Глобальные админы", value: activePlatformAdmins, percent: getPercent(activePlatformAdmins, totalUsers) },
+  ]
+
+  const statusMetrics: Array<{ status: StatusKey; label: string; value: number; percent: number }> = [
+    {
+      status: "pending",
+      label: "Ожидают",
+      value: pendingAppointments,
+      percent: getPercent(pendingAppointments, totalAppointments),
+    },
+    {
+      status: "confirmed",
+      label: "Подтверждены",
+      value: confirmedAppointments,
+      percent: getPercent(confirmedAppointments, totalAppointments),
+    },
+    {
+      status: "upcoming",
+      label: "Скоро",
+      value: upcomingAppointments,
+      percent: getPercent(upcomingAppointments, totalAppointments),
+    },
+    {
+      status: "cancelled",
+      label: "Отменены",
+      value: cancelledAppointments,
+      percent: getPercent(cancelledAppointments, totalAppointments),
+    },
+    {
+      status: "completed",
+      label: "Завершены",
+      value: completedAppointments,
+      percent: getPercent(completedAppointments, totalAppointments),
+    },
+  ]
+
+  const activityCards = [
+    { label: "Всего записей", value: totalAppointments },
+    { label: "Активные записи", value: activeAppointments },
+    { label: "Завершённые", value: completedAppointments },
+    { label: "Отменённые", value: cancelledAppointments },
+  ]
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-4 pt-3">
@@ -120,32 +210,64 @@ export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
       {error ? <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
 
       <Tabs defaultValue="analytics" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-secondary">
+        <TabsList className="grid w-full grid-cols-3 bg-secondary">
           <TabsTrigger value="analytics" className="text-xs">Аналитика</TabsTrigger>
-          <TabsTrigger value="users" className="text-xs">Users</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs">Пользователи</TabsTrigger>
           <TabsTrigger value="salons" className="text-xs">Салоны</TabsTrigger>
-          <TabsTrigger value="data" className="text-xs">Данные</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="analytics" className="mt-4 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            {statCards.map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-border bg-card p-3">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-1 text-lg font-semibold text-card-foreground">{value}</p>
-              </div>
-            ))}
-          </div>
-          {analytics ? (
+        <TabsContent value="analytics" className="mt-4 space-y-4">
+          <DashboardSection title="Обзор сервиса">
+            <div className="grid grid-cols-2 gap-2">
+              {overviewCards.map((card) => (
+                <StatCard key={card.label} {...card} />
+              ))}
+            </div>
+          </DashboardSection>
+
+          <DashboardSection title="Пользователи по ролям">
+            <div className="space-y-3">
+              {roleMetrics.map((metric) => (
+                <ProgressMetric key={metric.label} {...metric} />
+              ))}
+            </div>
+          </DashboardSection>
+
+          <DashboardSection title="Статусы записей">
+            <div className="space-y-3">
+              {statusMetrics.map((metric) => (
+                <ProgressMetric
+                  key={metric.status}
+                  label={metric.label}
+                  value={metric.value}
+                  percent={metric.percent}
+                  badge={<AppointmentStatusBadge status={metric.status} className="text-[10px]" />}
+                />
+              ))}
+            </div>
+          </DashboardSection>
+
+          <DashboardSection title="Качество сервиса">
             <div className="rounded-xl border border-border bg-card p-3">
-              <p className="text-sm font-medium">Статусы записей</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {Object.entries(analytics.appointmentsByStatus).map(([status, count]) => (
-                  <span key={status} className="rounded-md bg-secondary px-2 py-1 text-xs">{status}: {count}</span>
-                ))}
+              <div className="flex items-end gap-2">
+                <p className="text-3xl font-semibold text-card-foreground">{formatRating(averageMasterRating)}</p>
+                <p className="pb-1 text-sm text-muted-foreground">/ 5</p>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <QualityMetric label="Отзывы" value={totals.reviews ?? 0} />
+                <QualityMetric label="Завершены" value={completedAppointments} />
+                <QualityMetric label="Доля отмен" value={`${cancellationRate}%`} />
               </div>
             </div>
-          ) : null}
+          </DashboardSection>
+
+          <DashboardSection title="Активность записей">
+            <div className="grid grid-cols-2 gap-2">
+              {activityCards.map((card) => (
+                <SmallMetric key={card.label} label={card.label} value={card.value} />
+              ))}
+            </div>
+          </DashboardSection>
         </TabsContent>
 
         <TabsContent value="users" className="mt-4 space-y-2">
@@ -153,9 +275,14 @@ export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
             <div key={user.tgId} className="flex items-center justify-between rounded-xl border border-border bg-card p-3">
               <div>
                 <p className="text-sm font-medium">{user.fullName}</p>
-                <p className="text-xs text-muted-foreground">{user.role} · {user.tgId}</p>
+                <p className="text-xs text-muted-foreground">{getUserRoleLabel(user.role)} · {user.tgId}</p>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => void deleteUser(user)}>
+              <Button
+                aria-label="Удалить пользователя"
+                variant="destructive"
+                size="sm"
+                onClick={() => void deleteUser(user)}
+              >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
@@ -167,50 +294,117 @@ export function PlatformAdminScreen({ onBack }: PlatformAdminScreenProps) {
             <div key={salon.id} className="flex items-center justify-between rounded-xl border border-border bg-card p-3">
               <div>
                 <p className="text-sm font-medium">{salon.name}</p>
-                <p className="text-xs text-muted-foreground">owner: {salon.ownerId}</p>
+                <p className="text-xs text-muted-foreground">владелец: {salon.ownerId}</p>
               </div>
-              <Button variant="destructive" size="sm" onClick={() => void deleteSalon(salon)}>
+              <Button
+                aria-label="Удалить салон"
+                variant="destructive"
+                size="sm"
+                onClick={() => void deleteSalon(salon)}
+              >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
           ))}
-        </TabsContent>
-
-        <TabsContent value="data" className="mt-4 space-y-3">
-          <DataSection title="Записи" icon={<CalendarDays className="h-4 w-4" />}>
-            {appointments.map((appointment) => (
-              <div key={appointment.id} className="rounded-lg border border-border p-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span>{appointment.serviceName} · {appointment.startTime.slice(0, 16)}</span>
-                  <AppointmentStatusBadge status={appointment.status} />
-                </div>
-              </div>
-            ))}
-          </DataSection>
-          <DataSection title="Отзывы" icon={<Star className="h-4 w-4" />}>
-            {reviews.map((review) => (
-              <div key={review.id} className="rounded-lg border border-border p-2 text-xs">
-                appointment #{review.appointmentId} · {review.rating}/5 {review.comment ? `· ${review.comment}` : ""}
-              </div>
-            ))}
-          </DataSection>
-          <DataSection title="Ресурсы и услуги" icon={<Building2 className="h-4 w-4" />}>
-            <p className="text-xs text-muted-foreground">{resources.length} ресурсов · {services.length} услуг</p>
-          </DataSection>
         </TabsContent>
       </Tabs>
     </div>
   )
 }
 
-function DataSection({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+function DashboardSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {icon}
-        {title}
-      </div>
+    <section className="space-y-2">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {children}
+    </section>
+  )
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  subtitle,
+}: {
+  icon: ReactNode
+  label: string
+  value: ReactNode
+  subtitle: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <p className="text-xs">{label}</p>
+      </div>
+      <p className="mt-2 text-xl font-semibold text-card-foreground">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
     </div>
   )
+}
+
+function ProgressMetric({
+  label,
+  value,
+  percent,
+  badge,
+}: {
+  label: string
+  value: number
+  percent: number
+  badge?: ReactNode
+}) {
+  const safePercent = clampPercent(percent)
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-card-foreground">{label}</p>
+          {badge ? <div className="mt-1">{badge}</div> : null}
+        </div>
+        <p className="shrink-0 text-sm font-semibold text-card-foreground">{value}</p>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-secondary">
+        <div className="h-full rounded-full bg-primary/70" style={{ width: `${safePercent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function SmallMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-card-foreground">{value}</p>
+    </div>
+  )
+}
+
+function QualityMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-lg bg-secondary p-2">
+      <p className="truncate text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function getPercent(value: number, base: number) {
+  return Math.round((value / (base || 1)) * 100)
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(100, Math.max(0, value))
+}
+
+function formatRating(value: number) {
+  if (!Number.isFinite(value)) return "0"
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function getUserRoleLabel(role: ApiAdminUser["role"]) {
+  return role === "master" ? "Мастер" : "Клиент"
 }

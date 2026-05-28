@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -161,6 +162,12 @@ async def delete_service(
             detail="Услуга не найдена",
         )
 
-    service.is_active = False
-    session.add(service)
-    await session.commit()
+    try:
+        await session.delete(service)
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя удалить услугу: есть связанные записи",
+        )

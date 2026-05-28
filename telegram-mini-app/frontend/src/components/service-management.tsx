@@ -2,17 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Plus, Trash2, Scissors, Box, Info, Loader2 } from "lucide-react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { Plus, Trash2, Scissors, Box, Info, Loader2, X } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -40,7 +30,7 @@ interface ServiceManagementProps {
 export function ServiceManagement({ services, resources, onUpdate }: ServiceManagementProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const isDraftId = (id: string) => id.startsWith("draft-service-")
 
@@ -356,53 +346,45 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                     </div>
                   </div>
                 </button>
-                <button
-                  onClick={() => setPendingDeleteId(service.id)}
-                  disabled={loading === `delete-${service.id}`}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Удалить"
-                >
-                  {loading === `delete-${service.id}` ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+                {confirmDelete === service.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        void handleDeleteConfirmed(service.id)
+                        setConfirmDelete(null)
+                      }}
+                      disabled={loading === `delete-${service.id}`}
+                      className="flex h-8 items-center gap-1 rounded-lg bg-destructive px-2.5 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {loading === `delete-${service.id}` ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Удалить"
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary"
+                      aria-label="Отмена удаления"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDelete(service.id)}
+                    disabled={loading === `delete-${service.id}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Удалить"
+                  >
                     <Trash2 className="h-4 w-4" />
-                  )}
-                </button>
+                  </button>
+                )}
               </div>
             )}
           </motion.div>
         ))}
       </div>
-
-      <AlertDialog
-        open={Boolean(pendingDeleteId)}
-        onOpenChange={(open) => {
-          if (!open) setPendingDeleteId(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Удалить услугу?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Услуга будет удалена и исчезнет из списка. Действие нельзя отменить.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Отмена</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                const id = pendingDeleteId
-                setPendingDeleteId(null)
-                if (!id) return
-                void handleDeleteConfirmed(id)
-              }}
-            >
-              Удалить
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
