@@ -213,13 +213,24 @@ export interface ApiMasterService {
 export interface ApiMaster {
   id: string
   name: string
+  username?: string
+  telegramId: number
   avatar: string
   specialty: string
   rating: number
   reviewCount: number
+  recentReviews: ApiMasterReview[]
   services: ApiMasterService[]
   schedules?: ApiSchedule[]
   salonId?: string
+}
+
+export interface ApiMasterReview {
+  id: number
+  rating: number
+  comment?: string
+  clientName: string
+  createdAt: string
 }
 
 export interface ApiTimeSlot {

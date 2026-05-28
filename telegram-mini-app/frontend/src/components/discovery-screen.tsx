@@ -59,40 +59,71 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
       {/* Список мастеров */}
       <div className="flex flex-col gap-2.5">
         {filteredMasters.map((master, i) => (
-          <motion.button
+          <motion.article
             key={master.id}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.06 }}
             onClick={() => onSelectMaster(master)}
-            className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98]"
+            className="rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98]"
           >
-            {/* Аватар */}
-            <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-              {isAvatarImage(master.avatar) ? (
-                <img
-                  src={master.avatar}
-                  alt={master.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                master.avatar
-              )}
-            </div>
-
-            {/* Инфо */}
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-card-foreground">{master.name}</p>
-              <p className="text-xs text-muted-foreground">{master.specialty}</p>
-              <div className="mt-1 flex items-center gap-1">
-                <Star className="h-3 w-3 fill-[var(--tg-warning)] text-[var(--tg-warning)]" />
-                <span className="text-xs font-medium text-foreground">{master.rating}</span>
-                <span className="text-xs text-muted-foreground">({master.reviewCount} отзывов)</span>
+            <div className="flex items-start gap-3">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                {isAvatarImage(master.avatar) ? (
+                  <img
+                    src={master.avatar}
+                    alt={master.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  master.avatar
+                )}
               </div>
+
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold text-card-foreground">{master.name}</h2>
+                {master.username ? (
+                  <a
+                    href={`https://t.me/${master.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                    className="mt-0.5 block truncate text-sm font-medium text-primary"
+                  >
+                    @{master.username}
+                  </a>
+                ) : null}
+                <p className="mt-0.5 text-xs text-muted-foreground">ID: {master.telegramId}</p>
+                {master.specialty ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{master.specialty}</p>
+                ) : null}
+                <div className="mt-1 flex items-center gap-1">
+                  <Star className="h-3 w-3 fill-[var(--tg-warning)] text-[var(--tg-warning)]" />
+                  <span className="text-xs font-medium text-foreground">{master.rating} / 5</span>
+                  <span className="text-xs text-muted-foreground">({master.reviewCount} отзывов)</span>
+                </div>
+              </div>
+
+              <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
             </div>
 
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </motion.button>
+            {master.recentReviews.length > 0 ? (
+              <div className="mt-3 space-y-2 border-t border-border pt-3">
+                <p className="text-xs font-medium text-muted-foreground">Последние отзывы</p>
+                {master.recentReviews.map((review) => (
+                  <div key={review.id} className="rounded-lg bg-secondary p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-medium text-foreground">{review.clientName}</p>
+                      <span className="shrink-0 text-xs text-muted-foreground">⭐ {review.rating}/5</span>
+                    </div>
+                    {review.comment ? (
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{review.comment}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </motion.article>
         ))}
 
         {filteredMasters.length === 0 ? (

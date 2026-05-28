@@ -34,13 +34,24 @@ export interface Appointment {
 export interface Master {
   id: string
   name: string
+  username?: string
+  telegramId: number
   avatar: string
   specialty: string
   rating: number
   reviewCount: number
+  recentReviews: MasterReview[]
   services: Service[]
   workingHours?: WorkingHours[]
   salonId?: string
+}
+
+export interface MasterReview {
+  id: number
+  rating: number
+  comment?: string
+  clientName: string
+  createdAt: string
 }
 
 export interface SalonMember {

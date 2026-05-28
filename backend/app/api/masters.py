@@ -11,7 +11,7 @@ from common.models import Appointment, MasterSchedule, Review, User, UserRole
 from fastapi import APIRouter, Depends, HTTPException
 
 # Импортируем наши новые схемы
-from backend.app.schemas.masters import MasterOut, ScheduleOut, ServiceOut
+from backend.app.schemas.masters import MasterOut, ReviewSummaryOut, ScheduleOut, ServiceOut
 from backend.app.services.default_schedules import ensure_default_master_schedules
 
 router = APIRouter()
@@ -21,6 +21,7 @@ def map_user_to_master_out(
     master: User,
     review_count: int = 0,
     schedules: list[MasterSchedule] | None = None,
+    recent_reviews: list[ReviewSummaryOut] | None = None,
 ) -> MasterOut:
     """Вспомогательная функция для маппинга модели БД в схему ответа."""
     primary_salon_id = next(
@@ -30,10 +31,13 @@ def map_user_to_master_out(
     return MasterOut(
         id=str(master.tg_id),
         name=master.full_name,
+        username=master.username,
+        telegram_id=master.tg_id,
         avatar=(master.avatar or master.full_name[:2].upper()),
         specialty=(master.specialty or "Мастер красоты"),
         rating=float(master.rating),
         review_count=review_count,
+        recent_reviews=recent_reviews or [],
         services=[
             ServiceOut(
                 id=str(s.id),
@@ -70,6 +74,36 @@ async def load_review_counts(session: AsyncSession, master_ids: list[int]) -> di
     return {master_id: count for master_id, count in result.all()}
 
 
+async def load_recent_reviews(session: AsyncSession, master_ids: list[int], limit_per_master: int = 3) -> dict[int, list[ReviewSummaryOut]]:
+    if not master_ids:
+        return {}
+
+    result = await session.execute(
+        select(Review, Appointment.master_id, User.full_name)
+        .join(Appointment, Appointment.id == Review.appointment_id)
+        .join(User, User.tg_id == Appointment.client_id)
+        .where(Appointment.master_id.in_(master_ids))
+        .order_by(Appointment.master_id, Review.created_at.desc())
+    )
+
+    reviews_by_master_id: dict[int, list[ReviewSummaryOut]] = {}
+    for review, master_id, client_name in result.all():
+        master_reviews = reviews_by_master_id.setdefault(master_id, [])
+        if len(master_reviews) >= limit_per_master:
+            continue
+        master_reviews.append(
+            ReviewSummaryOut(
+                id=review.id,
+                rating=review.rating,
+                comment=review.comment,
+                client_name=client_name,
+                created_at=review.created_at,
+            )
+        )
+
+    return reviews_by_master_id
+
+
 @router.get("/", response_model=List[MasterOut])
 async def list_masters(session: AsyncSession = Depends(get_async_session)):
     query = (
@@ -87,13 +121,16 @@ async def list_masters(session: AsyncSession = Depends(get_async_session)):
 
     await session.commit()
 
-    review_counts = await load_review_counts(session, [master.tg_id for master in masters_db])
+    master_ids = [master.tg_id for master in masters_db]
+    review_counts = await load_review_counts(session, master_ids)
+    recent_reviews = await load_recent_reviews(session, master_ids)
 
     return [
         map_user_to_master_out(
             m,
             review_counts.get(m.tg_id, 0),
             schedules_by_master_id.get(m.tg_id),
+            recent_reviews.get(m.tg_id, []),
         )
         for m in masters_db
     ]
@@ -118,5 +155,11 @@ async def get_master_details(master_id: int, session: AsyncSession = Depends(get
     schedules = await ensure_default_master_schedules(session, master.tg_id)
     await session.commit()
     review_counts = await load_review_counts(session, [master.tg_id])
+    recent_reviews = await load_recent_reviews(session, [master.tg_id])
 
-    return map_user_to_master_out(master, review_counts.get(master.tg_id, 0), schedules)
+    return map_user_to_master_out(
+        master,
+        review_counts.get(master.tg_id, 0),
+        schedules,
+        recent_reviews.get(master.tg_id, []),
+    )

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .models import Appointment, AppointmentStatus
+from .notifications import notify_review_request
 
 
 AUTO_COMPLETABLE_STATUSES = (
@@ -21,7 +24,12 @@ async def auto_complete_due_appointments(session: AsyncSession) -> int:
     """Mark non-cancelled appointments as completed after their end time."""
 
     result = await session.execute(
-        select(Appointment).where(
+        select(Appointment)
+        .options(
+            selectinload(Appointment.review),
+            selectinload(Appointment.client),
+        )
+        .where(
             Appointment.status.in_(AUTO_COMPLETABLE_STATUSES),
             Appointment.end_time <= datetime.now(),
         )
@@ -34,5 +42,13 @@ async def auto_complete_due_appointments(session: AsyncSession) -> int:
 
     if appointments:
         await session.flush()
+        for appointment in appointments:
+            if appointment.client and appointment.review is None:
+                asyncio.create_task(
+                    notify_review_request(
+                        client_tg_id=appointment.client.tg_id,
+                        appointment_id=appointment.id,
+                    )
+                )
 
     return len(appointments)
