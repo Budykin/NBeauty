@@ -4,6 +4,17 @@ import { useMemo, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Clock, User, Box, Ban } from "lucide-react"
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import type { Appointment, Resource, Salon } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -19,7 +30,6 @@ interface MasterDashboardProps {
   showAddBooking?: boolean
   onCancel?: (id: string) => void
   onConfirm?: (id: string) => void
-  onComplete?: (id: string) => void
 }
 
 function getDaysAround(center: Date, range = 14) {
@@ -62,14 +72,13 @@ export function MasterDashboard({
   showAddBooking = false,
   onCancel,
   onConfirm,
-  onComplete,
 }: MasterDashboardProps) {
   const days = useMemo(() => getDaysAround(new Date()), [])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const selectedStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
   const dayAppointments = appointments
-    .filter((a) => a.date === selectedStr && a.status !== "cancelled")
+    .filter((a) => a.date === selectedStr && !["cancelled", "completed"].includes(a.status))
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
 
   // Записи других мастеров, занимающие ресурсы
@@ -79,7 +88,7 @@ export function MasterDashboard({
     return allAppointments
       .filter((a) => 
         a.date === selectedStr && 
-        a.status !== "cancelled" && 
+        !["cancelled", "completed"].includes(a.status) && 
         a.masterId !== currentMasterId &&
         a.resourceId
       )
@@ -220,15 +229,8 @@ export function MasterDashboard({
                           Подтвердить
                         </button>
                       ) : null}
-                      {(apt.status === "confirmed" || apt.status === "upcoming") && onComplete ? (
-                        <button onClick={() => onComplete(apt.id)} className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">
-                          Завершить
-                        </button>
-                      ) : null}
                       {!["cancelled", "completed"].includes(apt.status) && onCancel ? (
-                        <button onClick={() => onCancel(apt.id)} className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive">
-                          Отменить
-                        </button>
+                        <CancelAppointmentDialog onConfirm={() => onCancel(apt.id)} />
                       ) : null}
                     </div>
                   </div>
@@ -301,5 +303,29 @@ export function MasterDashboard({
         </AnimatePresence>
       </div>
     </div>
+  )
+}
+
+function CancelAppointmentDialog({ onConfirm }: { onConfirm: () => void }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive">
+          Отменить
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Отмена записи</AlertDialogTitle>
+          <AlertDialogDescription>Вы уверены, что хотите отменить запись?</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Нет</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Да, отменить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

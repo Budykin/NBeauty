@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import ReviewCreate, ReviewOut, ReviewUpdate
 from common import get_async_session
+from common.appointments import auto_complete_due_appointments
 from common.models import Appointment, AppointmentStatus, Review, User
 
 
@@ -52,6 +53,9 @@ async def create_review(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     appointment = await session.scalar(
         select(Appointment)
         .options(selectinload(Appointment.review))

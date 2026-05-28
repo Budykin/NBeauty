@@ -3,13 +3,14 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.filters import Command
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.appointments import auto_complete_due_appointments
 from common.db import get_async_session
 from common.models import Appointment, AppointmentStatus, User
 from common.notifications import (
     notify_appointment_confirmed,
+    notify_appointment_cancelled_for_client,
     edit_appointment_notification,
 )
 
@@ -28,10 +29,13 @@ async def on_confirm_appointment(callback: CallbackQuery):
         return
 
     async for session in get_async_session():
+        await auto_complete_due_appointments(session)
+        await session.commit()
+
         # Находим запись
         result = await session.execute(
             select(Appointment)
-            .options(selectinload(Appointment.service))
+            .options(selectinload(Appointment.service), selectinload(Appointment.salon))
             .where(Appointment.id == appointment_id)
         )
         appointment = result.scalar_one_or_none()
@@ -46,6 +50,9 @@ async def on_confirm_appointment(callback: CallbackQuery):
 
         if appointment.status == AppointmentStatus.CANCELLED:
             await callback.answer("Запись уже отменена", show_alert=True)
+            return
+        if appointment.status == AppointmentStatus.COMPLETED:
+            await callback.answer("Запись уже завершена", show_alert=True)
             return
 
         # Подтверждаем
@@ -66,7 +73,7 @@ async def on_confirm_appointment(callback: CallbackQuery):
         await session.close()
 
         # Обновляем сообщение в чате мастера
-        original_text = callback.message.text
+        original_text = callback.message.html_text or callback.message.text or ""
         updated_text = original_text + "\n\n✅ <b>Запись подтверждена</b>"
         await edit_appointment_notification(
             chat_id=callback.message.chat.id,
@@ -81,6 +88,8 @@ async def on_confirm_appointment(callback: CallbackQuery):
             await notify_appointment_confirmed(
                 client_tg_id=client.tg_id,
                 master_name=master.full_name,
+                master_tg_id=master.tg_id,
+                master_username=master.username,
                 service_name=appointment.service.name if appointment.service else "Услуга",
                 date_str=date_str,
                 start_time=time_str,
@@ -101,9 +110,19 @@ async def on_cancel_appointment(callback: CallbackQuery):
         return
 
     async for session in get_async_session():
+        await auto_complete_due_appointments(session)
+        await session.commit()
+
         # Находим запись
         result = await session.execute(
-            select(Appointment).where(Appointment.id == appointment_id)
+            select(Appointment)
+            .options(
+                selectinload(Appointment.service),
+                selectinload(Appointment.salon),
+                selectinload(Appointment.master),
+                selectinload(Appointment.client),
+            )
+            .where(Appointment.id == appointment_id)
         )
         appointment = result.scalar_one_or_none()
 
@@ -115,8 +134,8 @@ async def on_cancel_appointment(callback: CallbackQuery):
             await callback.answer("Запись уже отменена", show_alert=True)
             return
 
-        if appointment.status == AppointmentStatus.CONFIRMED:
-            await callback.answer("Запись уже подтверждена. Нельзя отменить.", show_alert=True)
+        if appointment.status == AppointmentStatus.COMPLETED:
+            await callback.answer("Запись уже завершена. Нельзя отменить.", show_alert=True)
             return
 
         # Отменяем
@@ -124,13 +143,25 @@ async def on_cancel_appointment(callback: CallbackQuery):
         await session.commit()
 
         # Обновляем сообщение в чате мастера
-        original_text = callback.message.text
+        original_text = callback.message.html_text or callback.message.text or ""
         updated_text = original_text + "\n\n❌ <b>Запись отменена</b>"
         await edit_appointment_notification(
             chat_id=callback.message.chat.id,
             message_id=callback.message.message_id,
             text=updated_text,
         )
+
+        if appointment.master and appointment.client:
+            await notify_appointment_cancelled_for_client(
+                client_tg_id=appointment.client.tg_id,
+                master_name=appointment.master.full_name,
+                master_tg_id=appointment.master.tg_id,
+                master_username=appointment.master.username,
+                service_name=appointment.service.name if appointment.service else "Услуга",
+                date_str=appointment.start_time.strftime("%d.%m.%Y"),
+                start_time=appointment.start_time.strftime("%H:%M"),
+                salon_name=appointment.salon.name if appointment.salon else None,
+            )
 
         await session.close()
 

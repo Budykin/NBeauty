@@ -1,8 +1,20 @@
 "use client"
 
+import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { CalendarDays, Clock, X, User as UserIcon } from "lucide-react"
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import type { Appointment } from "@/lib/types"
 
 interface MyBookingsProps {
@@ -21,13 +33,30 @@ function formatDate(dateStr: string) {
 }
 
 export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
+  const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => new Set())
+
   const active = appointments.filter((a) => !["cancelled", "completed"].includes(a.status)).sort((a, b) => {
     const da = `${a.date}${a.startTime}`
     const db = `${b.date}${b.startTime}`
     return da.localeCompare(db)
   })
-  const completed = appointments.filter((a) => a.status === "completed")
-  const cancelled = appointments.filter((a) => a.status === "cancelled")
+  const completed = appointments.filter((a) => a.status === "completed" && !hiddenHistoryIds.has(a.id))
+  const cancelled = appointments.filter((a) => a.status === "cancelled" && !hiddenHistoryIds.has(a.id))
+  const history = [...completed, ...cancelled].sort((a, b) => {
+    const left = `${b.date}${b.startTime}`
+    const right = `${a.date}${a.startTime}`
+    return left.localeCompare(right)
+  })
+
+  function clearHistoryByStatus(status: "completed" | "cancelled") {
+    setHiddenHistoryIds((current) => {
+      const next = new Set(current)
+      appointments
+        .filter((appointment) => appointment.status === status)
+        .forEach((appointment) => next.add(appointment.id))
+      return next
+    })
+  }
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-4 pt-3">
@@ -85,24 +114,40 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
             </div>
 
             {/* Отмена */}
-            <button
-              onClick={() => onCancel(apt.id)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              aria-label="Отменить запись"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <CancelAppointmentDialog onConfirm={() => onCancel(apt.id)} />
           </motion.div>
         ))}
       </AnimatePresence>
 
-      {completed.length > 0 && (
+      {history.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-muted-foreground">Завершённые</p>
-          {completed.map((apt) => (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-muted-foreground">История</p>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {completed.length > 0 ? (
+                <button
+                  onClick={() => clearHistoryByStatus("completed")}
+                  className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-secondary-foreground"
+                >
+                  Очистить завершённые
+                </button>
+              ) : null}
+              {cancelled.length > 0 ? (
+                <button
+                  onClick={() => clearHistoryByStatus("cancelled")}
+                  className="rounded-md bg-secondary px-2 py-1 text-[11px] font-medium text-secondary-foreground"
+                >
+                  Очистить отменённые
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {history.map((apt) => (
             <div key={apt.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
               <div>
-                <p className="text-sm text-card-foreground">{apt.service.name}</p>
+                <p className={apt.status === "cancelled" ? "text-sm text-card-foreground line-through" : "text-sm text-card-foreground"}>
+                  {apt.service.name}
+                </p>
                 <p className="text-xs text-muted-foreground">{formatDate(apt.date)}, {apt.startTime}</p>
               </div>
               <AppointmentStatusBadge status={apt.status} />
@@ -110,30 +155,33 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
           ))}
         </div>
       )}
-
-      {/* Отменённые */}
-      {cancelled.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-muted-foreground">Отменённые</p>
-          {cancelled.map((apt) => (
-            <div
-              key={apt.id}
-              className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 opacity-50"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                <X className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm text-card-foreground line-through">{apt.service.name}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(apt.date)}, {apt.startTime}</p>
-                <div className="mt-1">
-                  <AppointmentStatusBadge status={apt.status} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
+  )
+}
+
+function CancelAppointmentDialog({ onConfirm }: { onConfirm: () => void }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          aria-label="Отменить запись"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Отмена записи</AlertDialogTitle>
+          <AlertDialogDescription>Вы уверены, что хотите отменить запись?</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Нет</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Да, отменить
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

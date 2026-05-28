@@ -13,13 +13,13 @@ from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import AppointmentOut, TimeSlotOut
 from backend.app.services.slot_finder import find_slots_for_service
 from common import get_async_session
+from common.appointments import ACTIVE_APPOINTMENT_STATUSES, auto_complete_due_appointments
 from common.models import (
     Appointment,
     AppointmentStatus,
-    Service,
     User,
 )
-from common.notifications import notify_appointment_cancelled
+from common.notifications import notify_appointment_cancelled_for_client, notify_appointment_cancelled_for_master
 
 
 router = APIRouter()
@@ -30,6 +30,7 @@ def _appointment_options():
         selectinload(Appointment.service),
         selectinload(Appointment.master),
         selectinload(Appointment.client),
+        selectinload(Appointment.salon),
     )
 
 
@@ -90,13 +91,16 @@ async def get_my_appointments(
 ):
     """Получить записи текущего пользователя (как мастера или клиента)."""
 
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     if role == "master":
         query = (
             select(Appointment)
             .options(*_appointment_options())
             .where(
                 Appointment.master_id == current_user.tg_id,
-                Appointment.status != AppointmentStatus.CANCELLED,
+                Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
             )
             .order_by(Appointment.start_time)
         )
@@ -106,7 +110,7 @@ async def get_my_appointments(
             .options(*_appointment_options())
             .where(
                 Appointment.client_id == current_user.tg_id,
-                Appointment.status != AppointmentStatus.CANCELLED,
+                Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
             )
             .order_by(Appointment.start_time)
         )
@@ -123,6 +127,9 @@ async def get_my_appointments_history(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Получить историю записей (включая отменённые и завершённые)."""
+
+    await auto_complete_due_appointments(session)
+    await session.commit()
 
     if role == "master":
         query = (
@@ -152,6 +159,9 @@ async def cancel_appointment(
 ):
     """Отменить запись."""
 
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     result = await session.execute(
         select(Appointment)
         .options(*_appointment_options())
@@ -176,33 +186,49 @@ async def cancel_appointment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Запись уже отменена",
         )
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя отменить завершённую запись",
+        )
 
     appointment.status = AppointmentStatus.CANCELLED
     session.add(appointment)
     await session.commit()
 
-    # Отправляем уведомление мастеру об отмене (в фоне)
-    if appointment.master_id != current_user.tg_id:
-        # Если отменил клиент — уведомляем мастера
-        master_result = await session.execute(
-            select(User).where(User.tg_id == appointment.master_id)
-        )
-        master = master_result.scalar_one_or_none()
-        client_result = await session.execute(
-            select(User).where(User.tg_id == current_user.tg_id)
-        )
-        client = client_result.scalar_one_or_none()
+    date_str = appointment.start_time.strftime("%d.%m.%Y")
+    time_str = appointment.start_time.strftime("%H:%M")
+    service_name = appointment.service.name if appointment.service else "Услуга"
+    salon_name = appointment.salon.name if appointment.salon else None
+    master = appointment.master
+    client = appointment.client
 
-        if master and client and appointment.service:
-            date_str = appointment.start_time.strftime("%d.%m.%Y")
-            time_str = appointment.start_time.strftime("%H:%M")
+    if master and client:
+        asyncio.create_task(
+            notify_appointment_cancelled_for_client(
+                client_tg_id=client.tg_id,
+                master_name=master.full_name,
+                master_tg_id=master.tg_id,
+                master_username=master.username,
+                service_name=service_name,
+                date_str=date_str,
+                start_time=time_str,
+                salon_name=salon_name,
+            )
+        )
+
+    if appointment.master_id != current_user.tg_id:
+        if master and client:
             asyncio.create_task(
-                notify_appointment_cancelled(
+                notify_appointment_cancelled_for_master(
                     master_tg_id=master.tg_id,
                     client_name=client.full_name,
-                    service_name=appointment.service.name,
+                    client_tg_id=client.tg_id,
+                    client_username=client.username,
+                    service_name=service_name,
                     date_str=date_str,
                     start_time=time_str,
+                    salon_name=salon_name,
                 )
             )
 
@@ -215,6 +241,9 @@ async def confirm_appointment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     result = await session.execute(
         select(Appointment)
         .options(*_appointment_options())
@@ -224,6 +253,8 @@ async def confirm_appointment(
 
     if not appointment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Запись не найдена")
+    if appointment.status == AppointmentStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Запись уже завершена")
     if appointment.status != AppointmentStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Подтвердить можно только ожидающую запись")
 
@@ -240,6 +271,9 @@ async def complete_appointment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_async_session),
 ):
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     result = await session.execute(
         select(Appointment)
         .options(*_appointment_options())
@@ -249,11 +283,7 @@ async def complete_appointment(
 
     if not appointment:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Запись не найдена")
-    if appointment.status not in (AppointmentStatus.CONFIRMED, AppointmentStatus.UPCOMING):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Завершить можно только подтверждённую или предстоящую запись")
-
-    appointment.status = AppointmentStatus.COMPLETED
-    session.add(appointment)
-    await session.commit()
+    if appointment.status != AppointmentStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Запись завершается автоматически после окончания")
 
     return _to_appointment_out(appointment)

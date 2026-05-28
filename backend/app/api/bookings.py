@@ -4,10 +4,12 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_
 
 from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import AppointmentOut
+from common.appointments import ACTIVE_APPOINTMENT_STATUSES, auto_complete_due_appointments
 from common.db import get_async_session
 from common.models import Appointment, MasterSchedule, Service, AppointmentStatus, User
 from common.notifications import notify_appointment_created
@@ -25,13 +27,16 @@ async def create_booking(
 ):
     """Создать новую запись с проверкой доступности времени и кабинета."""
 
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     # Фронт может прислать ISO с таймзоной (например, 2026-05-02T12:00:00+03:00).
     # В нашей модели хранения/слотов время используется как "локальное на часах" (naive datetime),
     # поэтому сохраняем часы/минуты как есть и игнорируем tzinfo, чтобы не было сдвига в UTC.
     start_time = payload.start_time.replace(tzinfo=None) if payload.start_time.tzinfo else payload.start_time
 
     # 1. Находим услугу, чтобы узнать её длительность и нужен ли ей кабинет (resource_id)
-    service_query = select(Service).where(Service.id == payload.service_id)
+    service_query = select(Service).options(selectinload(Service.salon)).where(Service.id == payload.service_id)
     service_result = await session.execute(service_query)
     service = service_result.scalar_one_or_none()
 
@@ -73,7 +78,7 @@ async def create_booking(
 
     conflict_query = select(Appointment).where(
         and_(
-            Appointment.status != AppointmentStatus.CANCELLED,
+            Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
             busy_target_filter,
             Appointment.start_time < end_time,
             Appointment.end_time > start_time,
@@ -116,6 +121,8 @@ async def create_booking(
             notify_appointment_created(
                 master_tg_id=master.tg_id,
                 client_name=current_user.full_name,
+                client_tg_id=current_user.tg_id,
+                client_username=current_user.username,
                 service_name=service.name,
                 date_str=date_str,
                 start_time=time_str,

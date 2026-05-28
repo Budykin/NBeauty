@@ -51,7 +51,7 @@ export function SalonScheduleView({ salon, appointments, selectedDate, onSelectD
   // Получаем записи всех мастеров салона на выбранный день
   const salonMasterIds = salon.members.map((m) => m.masterId)
   const dayAppointments = appointments
-    .filter((a) => a.date === selectedStr && a.status !== "cancelled" && salonMasterIds.includes(a.masterId))
+    .filter((a) => a.date === selectedStr && !["cancelled", "completed"].includes(a.status) && salonMasterIds.includes(a.masterId))
     .sort((a, b) => a.startTime.localeCompare(b.startTime))
 
   useEffect(() => {

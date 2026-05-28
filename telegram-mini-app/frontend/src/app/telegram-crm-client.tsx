@@ -193,7 +193,9 @@ export default function TelegramCRMClient() {
         servicesResult,
         schedulesResult,
         masterAppointmentsResult,
+        masterHistoryResult,
         clientAppointmentsResult,
+        clientHistoryResult,
         platformAdminResult,
       ] = await Promise.allSettled([
         apiMasters.list(),
@@ -201,7 +203,9 @@ export default function TelegramCRMClient() {
         apiServices.my(),
         apiSchedules.my(),
         apiAppointments.my("master"),
+        apiAppointments.history("master"),
         apiAppointments.my("client"),
+        apiAppointments.history("client"),
         apiPlatformAdmin.me(),
       ])
 
@@ -211,7 +215,9 @@ export default function TelegramCRMClient() {
         servicesResult,
         schedulesResult,
         masterAppointmentsResult,
+        masterHistoryResult,
         clientAppointmentsResult,
+        clientHistoryResult,
         platformAdminResult,
       ].filter((result) => result.status === "rejected")
 
@@ -247,12 +253,14 @@ export default function TelegramCRMClient() {
 
       const nextAppointments = dedupeAppointments([
         ...(masterAppointmentsResult.status === "fulfilled" ? mapAppointments(masterAppointmentsResult.value) : []),
+        ...(masterHistoryResult.status === "fulfilled" ? mapAppointments(masterHistoryResult.value) : []),
         ...(clientAppointmentsResult.status === "fulfilled" ? mapAppointments(clientAppointmentsResult.value) : []),
+        ...(clientHistoryResult.status === "fulfilled" ? mapAppointments(clientHistoryResult.value) : []),
       ])
       setAppointments(nextAppointments)
       setIsPlatformAdmin(platformAdminResult.status === "fulfilled" ? platformAdminResult.value.isAdmin : false)
 
-      if (rejectedResults.length > 0 && rejectedResults.length < 7) {
+      if (rejectedResults.length > 0 && rejectedResults.length < 9) {
         setDataError("Часть данных не загрузилась. Основные функции доступны, но стоит проверить backend-логи.")
       }
     } catch (error) {
@@ -380,25 +388,6 @@ export default function TelegramCRMClient() {
     } catch (error) {
       console.error("Confirm appointment failed:", error)
       setDataError("Не удалось подтвердить запись.")
-    }
-  }, [updateAppointmentFromApi])
-
-  const handleCompleteAppointment = useCallback(async (id: string) => {
-    if (IS_DEV_AUTH_BYPASS) {
-      setAppointments((previous) =>
-        previous.map((appointment) =>
-          appointment.id === id ? { ...appointment, status: "completed" } : appointment,
-        ),
-      )
-      return
-    }
-
-    try {
-      const completed = await apiAppointments.complete(Number(id))
-      updateAppointmentFromApi(mapAppointment(completed))
-    } catch (error) {
-      console.error("Complete appointment failed:", error)
-      setDataError("Не удалось завершить запись.")
     }
   }, [updateAppointmentFromApi])
 
@@ -614,7 +603,6 @@ export default function TelegramCRMClient() {
                   onSelectDate={setSelectedDate}
                   onCancel={handleCancelAppointment}
                   onConfirm={handleConfirmAppointment}
-                  onComplete={handleCompleteAppointment}
                 />
               </motion.div>
             ) : null}

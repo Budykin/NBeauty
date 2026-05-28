@@ -7,7 +7,8 @@ from typing import List
 from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.models import Appointment, AppointmentStatus, MasterSchedule, Service
+from common.appointments import ACTIVE_APPOINTMENT_STATUSES
+from common.models import Appointment, MasterSchedule, Service
 from backend.app.services.default_schedules import ensure_default_master_schedules
 
 
@@ -75,7 +76,7 @@ async def find_slots_for_service(
     base_filter = and_(
         Appointment.master_id == master_id,
         func.date(Appointment.start_time) == target_date,
-        Appointment.status != AppointmentStatus.CANCELLED,
+        Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
     )
 
     busy_appointments: list[Appointment] = list(
@@ -87,7 +88,7 @@ async def find_slots_for_service(
         resource_filter = and_(
             Appointment.resource_id == service.resource_id,
             func.date(Appointment.start_time) == target_date,
-            Appointment.status != AppointmentStatus.CANCELLED,
+            Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
         )
         resource_appointments = list(
             await session.scalars(select(Appointment).where(resource_filter))

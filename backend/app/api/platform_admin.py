@@ -18,6 +18,7 @@ from backend.app.schemas.platform_admin import (
     DeleteImpactOut,
     PlatformAdminMeOut,
 )
+from common.appointments import auto_complete_due_appointments
 from common import get_async_session
 from common.models import (
     Appointment,
@@ -77,6 +78,9 @@ async def get_platform_analytics(
     _: User = Depends(require_platform_admin),
     session: AsyncSession = Depends(get_async_session),
 ):
+    await auto_complete_due_appointments(session)
+    await session.commit()
+
     now = datetime.now(timezone.utc)
     totals = {
         "users": await _count(session, select(func.count(User.tg_id))),
@@ -180,6 +184,9 @@ async def list_admin_appointments(
     session: AsyncSession = Depends(get_async_session),
 ):
     from sqlalchemy.orm import selectinload
+
+    await auto_complete_due_appointments(session)
+    await session.commit()
 
     result = await session.execute(
         select(Appointment)
