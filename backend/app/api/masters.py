@@ -1,12 +1,13 @@
 from __future__ import annotations
 from typing import List
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from starlette import status
 
 from common.db import get_async_session
-from common.models import User, UserRole
+from common.models import Appointment, MasterSchedule, Review, User, UserRole
 from fastapi import APIRouter, Depends, HTTPException
 
 # Импортируем наши новые схемы
@@ -16,7 +17,11 @@ from backend.app.services.default_schedules import ensure_default_master_schedul
 router = APIRouter()
 
 
-def map_user_to_master_out(master: User) -> MasterOut:
+def map_user_to_master_out(
+    master: User,
+    review_count: int = 0,
+    schedules: list[MasterSchedule] | None = None,
+) -> MasterOut:
     """Вспомогательная функция для маппинга модели БД в схему ответа."""
     primary_salon_id = next(
         (str(service.salon_id) for service in master.services if service.salon_id is not None),
@@ -28,7 +33,7 @@ def map_user_to_master_out(master: User) -> MasterOut:
         avatar=(master.avatar or master.full_name[:2].upper()),
         specialty=(master.specialty or "Мастер красоты"),
         rating=float(master.rating),
-        review_count=master.review_count,
+        review_count=review_count,
         services=[
             ServiceOut(
                 id=str(s.id),
@@ -46,10 +51,23 @@ def map_user_to_master_out(master: User) -> MasterOut:
                 start_time=s.start_time.strftime("%H:%M"),
                 end_time=s.end_time.strftime("%H:%M"),
             )
-            for s in sorted(master.schedules, key=lambda schedule: schedule.day_of_week)
+            for s in sorted(schedules if schedules is not None else master.schedules, key=lambda schedule: schedule.day_of_week)
         ],
         salon_id=primary_salon_id,
     )
+
+
+async def load_review_counts(session: AsyncSession, master_ids: list[int]) -> dict[int, int]:
+    if not master_ids:
+        return {}
+
+    result = await session.execute(
+        select(Appointment.master_id, func.count(Review.id))
+        .join(Review, Review.appointment_id == Appointment.id)
+        .where(Appointment.master_id.in_(master_ids))
+        .group_by(Appointment.master_id)
+    )
+    return {master_id: count for master_id, count in result.all()}
 
 
 @router.get("/", response_model=List[MasterOut])
@@ -62,18 +80,23 @@ async def list_masters(session: AsyncSession = Depends(get_async_session)):
     result = await session.execute(query)
     masters_db = result.scalars().all()
 
-    schedules_created = False
+    schedules_by_master_id: dict[int, list[MasterSchedule]] = {}
     for master in masters_db:
-        before_count = len(master.schedules)
         schedules = await ensure_default_master_schedules(session, master.tg_id)
-        if len(schedules) != before_count:
-            schedules_created = True
-        master.schedules = schedules
+        schedules_by_master_id[master.tg_id] = schedules
 
-    if schedules_created:
-        await session.commit()
+    await session.commit()
 
-    return [map_user_to_master_out(m) for m in masters_db]
+    review_counts = await load_review_counts(session, [master.tg_id for master in masters_db])
+
+    return [
+        map_user_to_master_out(
+            m,
+            review_counts.get(m.tg_id, 0),
+            schedules_by_master_id.get(m.tg_id),
+        )
+        for m in masters_db
+    ]
 
 
 @router.get("/{master_id}", response_model=MasterOut)
@@ -92,7 +115,8 @@ async def get_master_details(master_id: int, session: AsyncSession = Depends(get
             detail="Мастер не найден"
         )
 
-    master.schedules = await ensure_default_master_schedules(session, master.tg_id)
+    schedules = await ensure_default_master_schedules(session, master.tg_id)
     await session.commit()
+    review_counts = await load_review_counts(session, [master.tg_id])
 
-    return map_user_to_master_out(master)
+    return map_user_to_master_out(master, review_counts.get(master.tg_id, 0), schedules)

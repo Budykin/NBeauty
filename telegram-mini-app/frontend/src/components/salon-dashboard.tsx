@@ -2,13 +2,12 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { Users, Box, CalendarDays, Building2 } from "lucide-react"
+import { Users, Box, Building2 } from "lucide-react"
 import type { Salon, Resource, Appointment } from "@/lib/types"
 import { SalonMembersPanel } from "./salon-members-panel"
 import { SalonResourcesPanel } from "./salon-resources-panel"
 import { SalonScheduleView } from "./salon-schedule-view"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { cn } from "@/lib/utils"
 
 interface SalonDashboardProps {
   salon: Salon
@@ -27,7 +26,6 @@ export function SalonDashboard({
   appointments,
   selectedDate,
   onSelectDate,
-  onUpdateSalon,
   onRemoveMember,
   onUpdateResource,
   onAddResource,
@@ -38,12 +36,6 @@ export function SalonDashboard({
   const handleCopyInvite = async () => {
     await navigator.clipboard.writeText(salon.inviteCode)
   }
-
-  const tabs = [
-    { id: "schedule" as const, label: "Расписание", icon: CalendarDays },
-    { id: "members" as const, label: "Мастера", icon: Users },
-    { id: "resources" as const, label: "Ресурсы", icon: Box },
-  ]
 
   return (
     <div className="flex flex-col gap-4 pb-4">

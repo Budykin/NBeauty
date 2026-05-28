@@ -17,7 +17,7 @@ class MeOut(BaseModel):
     avatar: Optional[str] = None
     specialty: Optional[str] = None
     rating: float
-    review_count: int = Field(serialization_alias="reviewCount")
+    review_count: int = Field(default=0, serialization_alias="reviewCount")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -49,6 +49,12 @@ class SalonCreate(BaseModel):
 class SalonJoin(BaseModel):
     """Вступление в салон по коду приглашения."""
     invite_code: str = Field(min_length=1, max_length=24, alias="inviteCode")
+
+
+class InviteCodeOut(BaseModel):
+    invite_code: str = Field(alias="inviteCode")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 # ============================================================================
@@ -161,6 +167,29 @@ class AppointmentOut(BaseModel):
     start_time: datetime = Field(alias="startTime")
     end_time: datetime = Field(alias="endTime")
     status: str
+    created_at: datetime = Field(alias="createdAt")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class ReviewCreate(BaseModel):
+    appointment_id: int = Field(alias="appointmentId")
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = Field(default=None, max_length=1000)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ReviewUpdate(BaseModel):
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    comment: Optional[str] = Field(default=None, max_length=1000)
+
+
+class ReviewOut(BaseModel):
+    id: int
+    appointment_id: int = Field(alias="appointmentId")
+    rating: int
+    comment: Optional[str] = None
     created_at: datetime = Field(alias="createdAt")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)

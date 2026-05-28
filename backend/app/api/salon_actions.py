@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 
 from backend.app.core.auth import get_current_user
-from backend.app.schemas.common import SalonCreate, SalonJoin
+from backend.app.schemas.common import InviteCodeOut, SalonCreate, SalonJoin
 from backend.app.schemas.salons import SalonOut, SalonMemberOut, ResourceOut
 from common import get_async_session
 from common.models import Salon, SalonMember, SalonMemberRole, User
@@ -253,3 +253,22 @@ async def remove_member(
 
     await session.delete(member)
     await session.commit()
+
+
+@router.post("/{salon_id}/invite-code/regenerate", response_model=InviteCodeOut)
+async def regenerate_invite_code(
+    salon_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Перевыпустить invite_code через функцию БД."""
+    salon_uuid = uuid.UUID(salon_id)
+    await _check_salon_admin(session, current_user.tg_id, salon_uuid)
+
+    new_code = await session.scalar(
+        text("SELECT nbeauty.regenerate_salon_invite_code(:salon_id)"),
+        {"salon_id": str(salon_uuid)},
+    )
+    await session.commit()
+
+    return InviteCodeOut(invite_code=str(new_code))

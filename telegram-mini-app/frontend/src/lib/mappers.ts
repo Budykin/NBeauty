@@ -20,6 +20,7 @@ import type {
   ApiSalonMember,
   ApiSchedule,
 } from "./api"
+import { normalizeAppointmentStatus } from "./appointment-status"
 
 const DAY_NAMES = [
   { full: "Понедельник", short: "Пн" },
@@ -101,9 +102,7 @@ export function mapAppointment(
     date: dateStr,
     startTime: startTimeStr,
     endTime: endTimeStr,
-    status: api.status === "cancelled" ? "cancelled"
-      : api.status === "completed" ? "completed"
-      : "upcoming",
+    status: normalizeAppointmentStatus(api.status),
     resourceId: api.resourceId ? String(api.resourceId) : undefined,
   }
 }

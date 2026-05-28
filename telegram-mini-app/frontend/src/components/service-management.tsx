@@ -4,6 +4,16 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { Plus, Trash2, Scissors, Box, Info, Loader2 } from "lucide-react"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -19,6 +29,7 @@ import {
 import { apiServices } from "@/lib/api"
 import { IS_DEV_AUTH_BYPASS } from "@/lib/auth"
 import type { Service, Resource } from "@/lib/types"
+import { toast } from "@/components/ui/use-toast"
 
 interface ServiceManagementProps {
   services: Service[]
@@ -29,12 +40,15 @@ interface ServiceManagementProps {
 export function ServiceManagement({ services, resources, onUpdate }: ServiceManagementProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+
+  const isDraftId = (id: string) => id.startsWith("draft-service-")
 
   async function handleAdd() {
     if (IS_DEV_AUTH_BYPASS) {
       const newService: Service = {
         id: `dev-service-${Date.now()}`,
-        name: "Новая услуга",
+        name: "",
         price: 0,
         duration: 30,
       }
@@ -43,32 +57,26 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
       return
     }
 
-    setLoading("add")
-    try {
-      const created = await apiServices.create({
-        name: "Новая услуга",
-        price: 0,
-        duration: 30,
-      })
-      const newService: Service = {
-        id: String(created.id),
-        name: created.name,
-        price: created.price,
-        duration: created.duration,
-        resourceId: created.resourceId ? String(created.resourceId) : undefined,
-      }
-      onUpdate([...services, newService])
-      setEditingId(newService.id)
-    } catch (err) {
-      console.error("Create service failed:", err)
-    } finally {
-      setLoading(null)
+    const draft: Service = {
+      id: `draft-service-${Date.now()}`,
+      name: "",
+      price: 0,
+      duration: 30,
+      resourceId: undefined,
     }
+    onUpdate([...services, draft])
+    setEditingId(draft.id)
   }
 
   async function handleUpdate(id: string, field: keyof Service, value: string | number | undefined) {
     const service = services.find((s) => s.id === id)
     if (!service) return
+
+    // Для черновика ничего не отправляем на сервер, пока не нажали "Готово"
+    if (isDraftId(id) || IS_DEV_AUTH_BYPASS) {
+      onUpdate(services.map((s) => (s.id === id ? { ...s, [field]: value } : s)))
+      return
+    }
 
     const apiData: Record<string, unknown> = {}
     if (field === "name") apiData.name = value
@@ -82,16 +90,65 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
     )
 
     // Потом отправляем на сервер
-    if (IS_DEV_AUTH_BYPASS) return
-
     try {
       await apiServices.update(Number(id), apiData)
     } catch (err) {
       console.error("Update service failed:", err)
+      toast({
+        title: "Не удалось сохранить изменения",
+        description: "Проверь доступность backend и попробуй ещё раз.",
+        variant: "destructive",
+      })
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleCreateFromDraft(id: string) {
+    const draft = services.find((s) => s.id === id)
+    if (!draft) return
+
+    const name = (draft.name || "").trim()
+    if (!name) {
+      toast({
+        title: "Название услуги пустое",
+        description: "Введи название услуги, затем нажми «Готово».",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (loading === `create-${id}`) return
+    setLoading(`create-${id}`)
+    try {
+      const created = await apiServices.create({
+        name,
+        price: Number(draft.price) || 0,
+        duration: Number(draft.duration) || 30,
+        resourceId: draft.resourceId ? Number(draft.resourceId) : undefined,
+      })
+
+      const newService: Service = {
+        id: String(created.id),
+        name: created.name,
+        price: created.price,
+        duration: created.duration,
+        resourceId: created.resourceId ? String(created.resourceId) : undefined,
+      }
+
+      onUpdate(services.map((s) => (s.id === id ? newService : s)))
+      setEditingId(null)
+    } catch (err) {
+      console.error("Create service failed:", err)
+      toast({
+        title: "Не удалось создать услугу",
+        description: "Проверь доступность backend и попробуй ещё раз.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  async function handleDeleteConfirmed(id: string) {
     if (IS_DEV_AUTH_BYPASS) {
       onUpdate(services.filter((s) => s.id !== id))
       return
@@ -103,6 +160,11 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
       onUpdate(services.filter((s) => s.id !== id))
     } catch (err) {
       console.error("Delete service failed:", err)
+      toast({
+        title: "Не удалось удалить услугу",
+        description: "Проверь доступность backend и попробуй ещё раз.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(null)
     }
@@ -117,7 +179,7 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
         </div>
         <button
           onClick={handleAdd}
-          disabled={loading === "add"}
+          disabled={loading === "add" || Boolean(services.find((s) => isDraftId(s.id)))}
           className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95 disabled:opacity-50"
         >
           {loading === "add" ? (
@@ -152,7 +214,7 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                   type="text"
                   value={service.name}
                   onChange={(e) => handleUpdate(service.id, "name", e.target.value)}
-                  placeholder="Название услуги"
+                  placeholder="название услуги"
                   className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                   autoFocus
                 />
@@ -252,10 +314,24 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                 )}
 
                 <button
-                  onClick={() => setEditingId(null)}
-                  className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"
+                  onClick={() => {
+                    if (isDraftId(service.id) && !IS_DEV_AUTH_BYPASS) {
+                      void handleCreateFromDraft(service.id)
+                      return
+                    }
+                    setEditingId(null)
+                  }}
+                  disabled={loading === `create-${service.id}`}
+                  className="rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
                 >
-                  Готово
+                  {loading === `create-${service.id}` ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Сохраняем...
+                    </span>
+                  ) : (
+                    "Готово"
+                  )}
                 </button>
               </div>
             ) : (
@@ -281,17 +357,52 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
                   </div>
                 </button>
                 <button
-                  onClick={() => handleDelete(service.id)}
+                  onClick={() => setPendingDeleteId(service.id)}
+                  disabled={loading === `delete-${service.id}`}
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                   aria-label="Удалить"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {loading === `delete-${service.id}` ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             )}
           </motion.div>
         ))}
       </div>
+
+      <AlertDialog
+        open={Boolean(pendingDeleteId)}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить услугу?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Услуга будет удалена и исчезнет из списка. Действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingDeleteId(null)}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const id = pendingDeleteId
+                setPendingDeleteId(null)
+                if (!id) return
+                void handleDeleteConfirmed(id)
+              }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

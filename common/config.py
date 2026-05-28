@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # База данных
     database_url: AnyUrl = Field(alias="DATABASE_URL")
+    database_schema: str = Field(default="nbeauty", alias="DATABASE_SCHEMA")
 
     # JWT
     jwt_secret: str = Field(alias="JWT_SECRET")

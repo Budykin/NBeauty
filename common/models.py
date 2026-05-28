@@ -13,9 +13,9 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    MetaData,
     Numeric,
     String,
-    Text,
     Time,
     UniqueConstraint,
 )
@@ -26,7 +26,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     """Базовый класс для всех моделей."""
 
-    pass
+    metadata = MetaData(schema="nbeauty")
 
 
 class UserRole(str, enum.Enum):
@@ -70,10 +70,9 @@ class User(Base):
         default=UserRole.CLIENT,
     )
 
-    avatar: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     specialty: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     rating: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -84,7 +83,6 @@ class User(Base):
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     salons_owned: Mapped[List["Salon"]] = relationship(
@@ -112,16 +110,6 @@ class User(Base):
         back_populates="master",
         cascade="all, delete-orphan",
     )
-    reviews_received: Mapped[List["Review"]] = relationship(
-        back_populates="master",
-        foreign_keys="Review.master_id",
-        cascade="all, delete-orphan",
-    )
-    reviews_written: Mapped[List["Review"]] = relationship(
-        back_populates="client",
-        foreign_keys="Review.client_id",
-        cascade="all, delete-orphan",
-    )
     platform_admin_record: Mapped[Optional["PlatformAdmin"]] = relationship(
         back_populates="user",
         foreign_keys="PlatformAdmin.user_id",
@@ -134,7 +122,6 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint("rating >= 0 AND rating <= 5", name="chk_users_rating"),
-        CheckConstraint("review_count >= 0", name="chk_users_review_count"),
     )
 
 
@@ -205,7 +192,6 @@ class Salon(Base):
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     owner: Mapped[User] = relationship(back_populates="salons_owned")
@@ -302,7 +288,7 @@ class Resource(Base):
 
     __tablename__ = "resources"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     salon_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("salons.id", ondelete="CASCADE"),
@@ -321,7 +307,6 @@ class Resource(Base):
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     salon: Mapped[Salon] = relationship(back_populates="resources")
@@ -370,7 +355,6 @@ class Service(Base):
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     master: Mapped[User] = relationship(back_populates="services", foreign_keys=[master_id])
@@ -473,7 +457,6 @@ class Appointment(Base):
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
-        onupdate=datetime.utcnow,
     )
 
     salon: Mapped[Optional[Salon]] = relationship(back_populates="appointments")
@@ -500,18 +483,6 @@ class Review(Base):
         nullable=False,
         unique=True,
     )
-    master_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("users.tg_id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    client_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("users.tg_id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -521,8 +492,6 @@ class Review(Base):
     )
 
     appointment: Mapped[Appointment] = relationship(back_populates="review")
-    master: Mapped[User] = relationship(back_populates="reviews_received", foreign_keys=[master_id])
-    client: Mapped[User] = relationship(back_populates="reviews_written", foreign_keys=[client_id])
 
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="chk_reviews_rating"),

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common import get_async_session, settings
-from common.models import User
+from common.models import PlatformAdmin, User
 
 
 def validate_telegram_init_data(init_data: str) -> Dict[str, Any]:
@@ -148,3 +148,22 @@ async def get_current_user(
         )
 
     return user
+
+
+async def require_platform_admin(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+) -> User:
+    result = await session.execute(
+        select(PlatformAdmin).where(
+            PlatformAdmin.user_id == current_user.tg_id,
+            PlatformAdmin.is_active.is_(True),
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуются права глобального администратора",
+        )
+
+    return current_user

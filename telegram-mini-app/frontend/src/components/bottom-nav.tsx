@@ -2,8 +2,6 @@
 
 import { motion } from "framer-motion"
 import {
-  LayoutDashboard,
-  Search,
   User,
   CalendarDays,
   Scissors,

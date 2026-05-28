@@ -1,3 +1,5 @@
+import type { AppointmentStatus } from "./appointment-status"
+
 export type Role = "master" | "client" | "admin"
 
 export interface Resource {
@@ -25,7 +27,7 @@ export interface Appointment {
   date: string // YYYY-MM-DD
   startTime: string // HH:MM
   endTime: string // HH:MM
-  status: "upcoming" | "completed" | "cancelled"
+  status: AppointmentStatus
   resourceId?: string // ID занятого ресурса
 }
 
@@ -85,3 +87,4 @@ export type Screen =
   | "salon-members"
   | "salon-resources"
   | "my-salons"
+  | "platform-admin"

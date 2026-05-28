@@ -9,8 +9,10 @@ from backend.app.api import appointments as appointments_router
 from backend.app.api import auth as auth_router
 from backend.app.api import bookings as bookings_router
 from backend.app.api import masters as masters_router
+from backend.app.api import platform_admin as platform_admin_router
 from backend.app.api import profile as profile_router
 from backend.app.api import resources as resources_router
+from backend.app.api import reviews as reviews_router
 from backend.app.api import salon_actions as salon_actions_router
 from backend.app.api import salons as salons_router
 from backend.app.api import schedules as schedules_router
@@ -45,6 +47,8 @@ def create_app() -> FastAPI:
     app.include_router(schedules_router.router, prefix="/api/schedules", tags=["schedules"])
     app.include_router(appointments_router.router, prefix="/api/appointments", tags=["appointments"])
     app.include_router(resources_router.router, prefix="/api", tags=["resources"])
+    app.include_router(reviews_router.router, prefix="/api/reviews", tags=["reviews"])
+    app.include_router(platform_admin_router.router, prefix="/api/platform-admin", tags=["platform-admin"])
 
     @app.get("/health", tags=["health"])
     async def healthcheck() -> dict[str, str]:

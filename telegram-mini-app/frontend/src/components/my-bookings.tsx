@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion"
 import { CalendarDays, Clock, X, User as UserIcon } from "lucide-react"
+import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import type { Appointment } from "@/lib/types"
 
 interface MyBookingsProps {
@@ -20,11 +21,12 @@ function formatDate(dateStr: string) {
 }
 
 export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
-  const upcoming = appointments.filter((a) => a.status === "upcoming").sort((a, b) => {
+  const active = appointments.filter((a) => !["cancelled", "completed"].includes(a.status)).sort((a, b) => {
     const da = `${a.date}${a.startTime}`
     const db = `${b.date}${b.startTime}`
     return da.localeCompare(db)
   })
+  const completed = appointments.filter((a) => a.status === "completed")
   const cancelled = appointments.filter((a) => a.status === "cancelled")
 
   return (
@@ -32,13 +34,13 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
       <div>
         <h1 className="text-lg font-semibold text-foreground">Мои записи</h1>
         <p className="text-sm text-muted-foreground">
-          {upcoming.length > 0 ? `${upcoming.length} предстоящих` : "Нет предстоящих записей"}
+          {active.length > 0 ? `${active.length} активных` : "Нет активных записей"}
         </p>
       </div>
 
       {/* Предстоящие */}
       <AnimatePresence>
-        {upcoming.length === 0 && (
+        {active.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -52,7 +54,7 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
           </motion.div>
         )}
 
-        {upcoming.map((apt, i) => (
+        {active.map((apt, i) => (
           <motion.div
             key={apt.id}
             initial={{ opacity: 0, y: 10 }}
@@ -69,6 +71,9 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
             {/* Детали */}
             <div className="flex-1">
               <p className="text-sm font-semibold text-card-foreground">{apt.service.name}</p>
+              <div className="mt-1">
+                <AppointmentStatusBadge status={apt.status} />
+              </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <UserIcon className="h-3 w-3" />
                 <span>{apt.masterName}</span>
@@ -91,6 +96,21 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
         ))}
       </AnimatePresence>
 
+      {completed.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Завершённые</p>
+          {completed.map((apt) => (
+            <div key={apt.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+              <div>
+                <p className="text-sm text-card-foreground">{apt.service.name}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(apt.date)}, {apt.startTime}</p>
+              </div>
+              <AppointmentStatusBadge status={apt.status} />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Отменённые */}
       {cancelled.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -106,6 +126,9 @@ export function MyBookingsScreen({ appointments, onCancel }: MyBookingsProps) {
               <div>
                 <p className="text-sm text-card-foreground line-through">{apt.service.name}</p>
                 <p className="text-xs text-muted-foreground">{formatDate(apt.date)}, {apt.startTime}</p>
+                <div className="mt-1">
+                  <AppointmentStatusBadge status={apt.status} />
+                </div>
               </div>
             </div>
           ))}

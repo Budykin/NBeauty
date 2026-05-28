@@ -2,6 +2,8 @@
 // API клиент — все запросы к бэкенду
 // ============================================================================
 
+import type { AppointmentStatus } from "./appointment-status"
+
 const rawApiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "")
 const API_BASE = rawApiBase
   ? (rawApiBase.endsWith("/api") ? rawApiBase : `${rawApiBase}/api`)
@@ -150,7 +152,53 @@ export interface ApiAppointment {
   resourceId?: number
   startTime: string
   endTime: string
-  status: string
+  status: AppointmentStatus
+  createdAt: string
+}
+
+export interface ApiPlatformAdminMe {
+  isAdmin: boolean
+}
+
+export interface ApiAdminAnalytics {
+  totals: Record<string, number>
+  appointmentsByStatus: Record<AppointmentStatus, number>
+  appointmentsRecent: Record<string, number>
+  averageMasterRating: number
+  topMasters: Array<{ id: number; name: string; rating: number }>
+  topSalons: Array<{ id: string; name: string; appointments: number }>
+  telegramLoginSessions: Record<string, number>
+}
+
+export interface ApiDeleteImpact {
+  entityType: "user" | "salon"
+  entityId: string
+  counts: Record<string, number>
+  warnings: string[]
+}
+
+export interface ApiAdminUser {
+  tgId: number
+  fullName: string
+  username?: string
+  role: "client" | "master"
+  rating: number
+  createdAt: string
+}
+
+export interface ApiAdminSalon {
+  id: string
+  name: string
+  ownerId: number
+  inviteCode: string
+  createdAt: string
+}
+
+export interface ApiReview {
+  id: number
+  appointmentId: number
+  rating: number
+  comment?: string
   createdAt: string
 }
 
@@ -417,6 +465,18 @@ export const apiAppointments = {
       method: "PUT",
     })
   },
+
+  confirm(id: number) {
+    return request<ApiAppointment>(`/appointments/${id}/confirm`, {
+      method: "PUT",
+    })
+  },
+
+  complete(id: number) {
+    return request<ApiAppointment>(`/appointments/${id}/complete`, {
+      method: "PUT",
+    })
+  },
 }
 
 // ============================================================================
@@ -444,5 +504,61 @@ export const apiResources = {
 
   delete(id: number) {
     return request<void>(`/resources/${id}`, { method: "DELETE" })
+  },
+}
+
+export const apiPlatformAdmin = {
+  me() {
+    return request<ApiPlatformAdminMe>("/platform-admin/me")
+  },
+
+  analytics() {
+    return request<ApiAdminAnalytics>("/platform-admin/analytics")
+  },
+
+  users() {
+    return request<ApiAdminUser[]>("/platform-admin/users")
+  },
+
+  salons() {
+    return request<ApiAdminSalon[]>("/platform-admin/salons")
+  },
+
+  appointments() {
+    return request<ApiAppointment[]>("/platform-admin/appointments")
+  },
+
+  reviews() {
+    return request<ApiReview[]>("/platform-admin/reviews")
+  },
+
+  resources() {
+    return request<ApiResource[]>("/platform-admin/resources")
+  },
+
+  services() {
+    return request<ApiService[]>("/platform-admin/services")
+  },
+
+  userDeleteImpact(userId: number) {
+    return request<ApiDeleteImpact>(`/platform-admin/users/${userId}/delete-impact`)
+  },
+
+  deleteUser(userId: number) {
+    return request<void>(`/platform-admin/users/${userId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirm: true }),
+    })
+  },
+
+  salonDeleteImpact(salonId: string) {
+    return request<ApiDeleteImpact>(`/platform-admin/salons/${salonId}/delete-impact`)
+  },
+
+  deleteSalon(salonId: string) {
+    return request<void>(`/platform-admin/salons/${salonId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirm: true }),
+    })
   },
 }

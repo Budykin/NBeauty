@@ -23,8 +23,11 @@ async def get_my_services(
 
     result = await session.execute(
         select(Service)
-        .where(Service.master_id == current_user.tg_id)
-        .order_by(Service.is_active.desc(), Service.name)
+        .where(
+            Service.master_id == current_user.tg_id,
+            Service.is_active.is_(True),
+        )
+        .order_by(Service.name)
     )
     services = result.scalars().all()
 
@@ -50,9 +53,26 @@ async def create_service(
 ):
     """Создать новую услугу."""
 
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty service name")
+    # Защита от старого фронта, который создавал услугу с дефолтным именем сразу при клике "Добавить".
+    # Не блокируем реальное название, если пользователь осознанно меняет параметры.
+    if (
+        name.casefold() == "новая услуга"
+        and payload.price == 0
+        and payload.duration == 30
+        and payload.salon_id is None
+        and payload.resource_id is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Service name must be entered",
+        )
+
     service = Service(
         master_id=current_user.tg_id,
-        name=payload.name,
+        name=name,
         duration=payload.duration,
         price=payload.price,
         salon_id=payload.salon_id,
@@ -97,6 +117,10 @@ async def update_service(
         )
 
     update_data = payload.model_dump(exclude_unset=True)
+    if "name" in update_data and update_data["name"] is not None:
+        update_data["name"] = str(update_data["name"]).strip()
+        if not update_data["name"]:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Empty service name")
     for field, value in update_data.items():
         setattr(service, field, value)
 
@@ -137,5 +161,6 @@ async def delete_service(
             detail="Услуга не найдена",
         )
 
-    await session.delete(service)
+    service.is_active = False
+    session.add(service)
     await session.commit()

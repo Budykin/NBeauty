@@ -23,6 +23,11 @@ def _make_async_engine() -> AsyncEngine:
         str(settings.database_url),
         echo=False,
         future=True,
+        connect_args={
+            "server_settings": {
+                "search_path": f"{settings.database_schema},public",
+            },
+        },
     )
 
 
@@ -40,4 +45,3 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
     async with async_session_factory() as session:
         yield session
-

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Clock, User, Box, Ban } from "lucide-react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import type { Appointment, Resource, Salon } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -17,6 +17,9 @@ interface MasterDashboardProps {
   onSelectDate: (date: Date) => void
   onAddBooking?: () => void
   showAddBooking?: boolean
+  onCancel?: (id: string) => void
+  onConfirm?: (id: string) => void
+  onComplete?: (id: string) => void
 }
 
 function getDaysAround(center: Date, range = 14) {
@@ -57,6 +60,9 @@ export function MasterDashboard({
   onSelectDate,
   onAddBooking,
   showAddBooking = false,
+  onCancel,
+  onConfirm,
+  onComplete,
 }: MasterDashboardProps) {
   const days = useMemo(() => getDaysAround(new Date()), [])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -196,6 +202,9 @@ export function MasterDashboard({
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <p className="text-sm font-semibold text-card-foreground">{apt.service.name}</p>
+                        <div className="mt-1">
+                          <AppointmentStatusBadge status={apt.status} />
+                        </div>
                         <div className="mt-1 flex items-center gap-1.5 text-muted-foreground">
                           <User className="h-3 w-3" />
                           <span className="text-xs">{apt.clientName}</span>
@@ -204,6 +213,23 @@ export function MasterDashboard({
                       <span className="rounded-md bg-accent px-2 py-0.5 text-[10px] font-medium text-accent-foreground">
                         {apt.service.duration} мин
                       </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {apt.status === "pending" && onConfirm ? (
+                        <button onClick={() => onConfirm(apt.id)} className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">
+                          Подтвердить
+                        </button>
+                      ) : null}
+                      {(apt.status === "confirmed" || apt.status === "upcoming") && onComplete ? (
+                        <button onClick={() => onComplete(apt.id)} className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">
+                          Завершить
+                        </button>
+                      ) : null}
+                      {!["cancelled", "completed"].includes(apt.status) && onCancel ? (
+                        <button onClick={() => onCancel(apt.id)} className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive">
+                          Отменить
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </motion.div>

@@ -27,7 +27,6 @@ export function SalonResourcesPanel({
   onUpdateResource,
   onAddResource,
   onDeleteResource,
-  salonId,
 }: SalonResourcesPanelProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [newResourceName, setNewResourceName] = useState("")

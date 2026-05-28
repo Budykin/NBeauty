@@ -207,3 +207,53 @@ async def cancel_appointment(
             )
 
     return _to_appointment_out(appointment)
+
+
+@router.put("/{appointment_id}/confirm", response_model=AppointmentOut)
+async def confirm_appointment(
+    appointment_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    result = await session.execute(
+        select(Appointment)
+        .options(*_appointment_options())
+        .where(Appointment.id == appointment_id, Appointment.master_id == current_user.tg_id)
+    )
+    appointment = result.scalar_one_or_none()
+
+    if not appointment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Запись не найдена")
+    if appointment.status != AppointmentStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Подтвердить можно только ожидающую запись")
+
+    appointment.status = AppointmentStatus.CONFIRMED
+    session.add(appointment)
+    await session.commit()
+
+    return _to_appointment_out(appointment)
+
+
+@router.put("/{appointment_id}/complete", response_model=AppointmentOut)
+async def complete_appointment(
+    appointment_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    result = await session.execute(
+        select(Appointment)
+        .options(*_appointment_options())
+        .where(Appointment.id == appointment_id, Appointment.master_id == current_user.tg_id)
+    )
+    appointment = result.scalar_one_or_none()
+
+    if not appointment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Запись не найдена")
+    if appointment.status not in (AppointmentStatus.CONFIRMED, AppointmentStatus.UPCOMING):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Завершить можно только подтверждённую или предстоящую запись")
+
+    appointment.status = AppointmentStatus.COMPLETED
+    session.add(appointment)
+    await session.commit()
+
+    return _to_appointment_out(appointment)

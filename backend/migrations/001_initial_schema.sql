@@ -1,419 +1,332 @@
--- ============================================================================
--- NBeauty — Схема базы данных для Telegram Mini App
--- ============================================================================
--- 
--- КОНЦЕПЦИЯ РОЛЕЙ:
--- 
--- 1. users.role = 'client' | 'master'
---    - Определяет РЕЖИМ использования приложения
---    - Переключается в интерфейсе (master ↔ client)
---    - Один пользователь может быть и мастером, и клиентом
---
--- 2. salon_members.role = 'admin' | 'master'
---    - Определяет ПРАВА в КОНКРЕТНОМ салоне
---    - admin: управление салоном, мастерами, ресурсами
---    - master: работает в салоне, видит только свои записи
---    - Один пользователь может быть админом в одном салоне 
---      и обычным мастером в другом
---
--- 3. platform_admins — отдельная таблица для глобальных админов платформы
---    - Не смешивается с обычными ролями
---    - Даёт доступ к админ-панели всей платформы
---    - Может быть выдано любому пользователю
--- ============================================================================
+-- NBeauty fresh PostgreSQL init.
+-- Source of truth: /Users/nic_piter/Desktop/nbeauty_dump_last.sql
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
--- ============================================================================
--- ПОЛЬЗОВАТЕЛИ
--- ============================================================================
--- role: 'client' или 'master' — режим работы приложения
--- Переключается в интерфейсе без ограничений
--- ============================================================================
-CREATE TABLE IF NOT EXISTS users (
-    tg_id BIGINT PRIMARY KEY,
-    full_name VARCHAR(255) NOT NULL,
-    username VARCHAR(255) UNIQUE,
-    role VARCHAR(32) NOT NULL DEFAULT 'client'
-        CHECK (role IN ('client', 'master')),
-    avatar VARCHAR(255),
-    specialty VARCHAR(255),
-    rating NUMERIC(3, 2) NOT NULL DEFAULT 0,
-    review_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_users_rating CHECK (rating >= 0 AND rating <= 5),
-    CONSTRAINT chk_users_review_count CHECK (review_count >= 0)
-);
+CREATE SCHEMA IF NOT EXISTS nbeauty;
+GRANT ALL ON SCHEMA nbeauty TO CURRENT_USER;
+ALTER DATABASE postgres SET search_path TO nbeauty, public;
+SET search_path TO nbeauty, public;
 
-COMMENT ON TABLE users IS 'Пользователи Telegram. role определяет режим: мастер (оказывает услуги) или клиент (записывается)';
-COMMENT ON COLUMN users.role IS 'client или master — переключается в интерфейсе приложения';
-
--- ============================================================================
--- ГЛОБАЛЬНЫЕ АДМИНЫ ПЛАТФОРМЫ
--- ============================================================================
--- Отдельная таблица, не смешивается с users.role
--- Админ платформы = обычный пользователь с доп. правами
--- ============================================================================
-CREATE TABLE IF NOT EXISTS platform_admins (
-    user_id BIGINT PRIMARY KEY REFERENCES users(tg_id) ON DELETE CASCADE,
-    granted_by BIGINT REFERENCES users(tg_id) ON DELETE SET NULL,
-    granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    is_active BOOLEAN NOT NULL DEFAULT true
-);
-
-COMMENT ON TABLE platform_admins IS 'Глобальные администраторы всей платформы (не салона!)';
-COMMENT ON COLUMN platform_admins.granted_by IS 'Кто выдал права админа';
-
--- ============================================================================
--- САЛОНЫ
--- ============================================================================
--- owner_id — создатель салона (автоматически становится admin в salon_members)
--- invite_code — длинный уникальный код (Base62, 24 символа) для приглашения
---               Генерируется автоматически при создании
---               Можно перевыпустить через функцию regenerate_salon_invite_code()
--- ============================================================================
-CREATE TABLE IF NOT EXISTS salons (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
-    owner_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    invite_code VARCHAR(24) NOT NULL UNIQUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-COMMENT ON TABLE salons IS 'Салоны/студии. Владелец автоматически получает роль admin в salon_members';
-COMMENT ON COLUMN salons.invite_code IS 'Уникальный код приглашения (Base62, 24 символа). Перевыпускается через функцию';
-
--- ============================================================================
--- ФУНКЦИЯ: ГЕНЕРАЦИЯ INVITE_CODE (Base62, 24 символа)
--- ============================================================================
-CREATE OR REPLACE FUNCTION generate_invite_code()
-RETURNS VARCHAR(24) AS $$
+CREATE OR REPLACE FUNCTION nbeauty.generate_invite_code()
+RETURNS varchar
+LANGUAGE plpgsql
+AS $$
 DECLARE
-    chars TEXT := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-    result TEXT := '';
-    i INTEGER;
+    chars text := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    result text := '';
+    i integer;
 BEGIN
     FOR i IN 1..24 LOOP
-        result := result || SUBSTRING(chars FROM ceil(random() * 62)::int FOR 1);
+        result := result || substring(chars FROM ceil(random() * 62)::int FOR 1);
     END LOOP;
+
     RETURN result;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
--- Триггер для авто-генерации invite_code при создании салона
-CREATE OR REPLACE FUNCTION trigger_generate_invite_code()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.invite_code := generate_invite_code();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_salons_invite_code
-    BEFORE INSERT ON salons
-    FOR EACH ROW
-    EXECUTE FUNCTION trigger_generate_invite_code();
-
--- ============================================================================
--- ФУНКЦИЯ: ПЕРЕВЫПУСК INVITE_CODE
--- ============================================================================
--- Вызывается когда админ салона хочет отозвать старый код и создать новый
--- Пример: SELECT regenerate_salon_invite_code('salon-uuid-here');
--- ============================================================================
-CREATE OR REPLACE FUNCTION regenerate_salon_invite_code(p_salon_id UUID)
-RETURNS VARCHAR(24) AS $$
+CREATE OR REPLACE FUNCTION nbeauty.regenerate_salon_invite_code(p_salon_id uuid)
+RETURNS varchar
+LANGUAGE plpgsql
+AS $$
 DECLARE
-    new_code VARCHAR(24);
-    v_owner_id BIGINT;
-    v_is_admin BOOLEAN;
+    new_code varchar(24);
 BEGIN
-    -- Проверяем, что салон существует
-    SELECT owner_id INTO v_owner_id FROM salons WHERE id = p_salon_id;
-    
+    PERFORM 1 FROM nbeauty.salons WHERE id = p_salon_id;
+
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Салон с ID % не найден', p_salon_id;
     END IF;
 
-    -- Генерируем новый код
-    new_code := generate_invite_code();
-    
-    -- Обновляем салон
-    UPDATE salons 
-    SET invite_code = new_code, updated_at = now()
+    new_code := nbeauty.generate_invite_code();
+
+    UPDATE nbeauty.salons
+    SET invite_code = new_code,
+        updated_at = now()
     WHERE id = p_salon_id;
-    
+
     RETURN new_code;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-COMMENT ON FUNCTION regenerate_salon_invite_code IS 'Перевыпускает код приглашения салона. Возвращает новый код';
-
--- ============================================================================
--- УЧАСТНИКИ САЛОНА
--- ============================================================================
--- role: 'admin' | 'master'
--- admin — может управлять салоном, добавлять/удалять мастеров, ресурсы
--- master — работает в салоне, видит только свои записи
--- Один пользователь может быть в нескольких салонах с разными ролями
--- ============================================================================
-CREATE TABLE IF NOT EXISTS salon_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    role VARCHAR(32) NOT NULL DEFAULT 'master'
-        CHECK (role IN ('admin', 'master')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_salon_members_salon_user UNIQUE (salon_id, user_id)
-);
-
-COMMENT ON TABLE salon_members IS 'Участники салона: admin (управляет) или master (работает)';
-COMMENT ON COLUMN salon_members.role IS 'admin = управление салоном, master = только работа';
-
--- ============================================================================
--- РЕСУРСЫ (кабинеты, кресла, оборудование)
--- ============================================================================
--- Ресурсы принадле салону, могут быть заняты во время записи
--- ============================================================================
-CREATE TABLE IF NOT EXISTS resources (
-    id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT uq_resources_salon_name UNIQUE (salon_id, name)
-);
-
-COMMENT ON TABLE resources IS 'Ресурсы салона: кабинеты, кресла, оборудование — могут бронироваться вместе с записью';
-
--- ============================================================================
--- УСЛУГИ
--- ============================================================================
--- master_id — мастер, который оказывает услугу
--- salon_id — салон, где оказывается (может быть NULL)
--- resource_id — ресурс, который нужен (опционально)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS services (
-    id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    master_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    salon_id UUID REFERENCES salons(id) ON DELETE SET NULL,
-    resource_id INTEGER REFERENCES resources(id) ON DELETE SET NULL,
-    name VARCHAR(255) NOT NULL,
-    duration INTEGER NOT NULL,
-    price INTEGER NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_services_duration_positive CHECK (duration > 0),
-    CONSTRAINT chk_services_price_non_negative CHECK (price >= 0)
-);
-
-COMMENT ON TABLE services IS 'Услуги мастеров. price — для отображения клиенту (без финансовой логики)';
-
--- ============================================================================
--- РАСПИСАНИЕ МАСТЕРОВ
--- ============================================================================
--- day_of_week: 0=Понедельник ... 6=Воскресенье
--- Определяет рабочие дни и часы мастера в конкретном салоне
--- ============================================================================
-CREATE TABLE IF NOT EXISTS master_schedules (
-    id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    master_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    salon_id UUID REFERENCES salons(id) ON DELETE CASCADE,
-    day_of_week INTEGER NOT NULL,
-    is_enabled BOOLEAN NOT NULL DEFAULT true,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
-    CONSTRAINT chk_master_schedules_day CHECK (day_of_week >= 0 AND day_of_week <= 6),
-    CONSTRAINT chk_master_schedules_time CHECK (start_time < end_time),
-    CONSTRAINT uq_master_schedules_master_salon_day UNIQUE (master_id, salon_id, day_of_week)
-);
-
-COMMENT ON TABLE master_schedules IS 'Рабочее расписание мастеров: дни недели и часы работы в салоне';
-COMMENT ON COLUMN master_schedules.day_of_week IS '0=Понедельник, 1=Вторник, ..., 6=Воскресенье';
-
--- ============================================================================
--- ЗАПИСИ НА ПРИЁМ
--- ============================================================================
--- status: pending → confirmed → upcoming → completed / cancelled
--- Защита от overlap: мастер и ресурс не могут быть заняты одновременно
--- ============================================================================
-CREATE TABLE IF NOT EXISTS appointments (
-    id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    salon_id UUID REFERENCES salons(id) ON DELETE SET NULL,
-    master_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    client_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    resource_id INTEGER REFERENCES resources(id) ON DELETE SET NULL,
-    service_id INTEGER NOT NULL REFERENCES services(id) ON DELETE RESTRICT,
-    start_time TIMESTAMPTZ NOT NULL,
-    end_time TIMESTAMPTZ NOT NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'confirmed', 'upcoming', 'cancelled', 'completed')),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_appointments_time CHECK (start_time < end_time)
-);
-
-COMMENT ON TABLE appointments IS 'Записи клиентов к мастерам. status отслеживает жизненный цикл записи';
-
--- ============================================================================
--- ОТЗЫВЫ
--- ============================================================================
--- Один отзыв на одну запись (appointment_id UNIQUE)
--- rating: 1-5, влияет на рейтинг мастера в users.rating
--- ============================================================================
-CREATE TABLE IF NOT EXISTS reviews (
-    id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    appointment_id INTEGER NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
-    master_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    client_id BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
-    rating INTEGER NOT NULL,
-    comment VARCHAR(1000),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT chk_reviews_rating CHECK (rating >= 1 AND rating <= 5)
-);
-
-COMMENT ON TABLE reviews IS 'Отзывы клиентов о мастерах. Один отзыв = одна завершённая запись';
-
--- ============================================================================
--- ИНДЕКСЫ
--- ============================================================================
-
--- Салоны
-CREATE INDEX IF NOT EXISTS ix_salons_owner_id ON salons(owner_id);
-CREATE INDEX IF NOT EXISTS ix_salons_invite_code ON salons(invite_code);
-
--- Ресурсы
-CREATE INDEX IF NOT EXISTS ix_resources_salon_id ON resources(salon_id);
-
--- Услуги
-CREATE INDEX IF NOT EXISTS ix_services_master_id ON services(master_id);
-CREATE INDEX IF NOT EXISTS ix_services_salon_id ON services(salon_id);
-
--- Расписание
-CREATE INDEX IF NOT EXISTS ix_master_schedules_master_id ON master_schedules(master_id);
-CREATE INDEX IF NOT EXISTS ix_master_schedules_salon_id ON master_schedules(salon_id);
-
--- Записи
-CREATE INDEX IF NOT EXISTS ix_appointments_salon_id ON appointments(salon_id);
-CREATE INDEX IF NOT EXISTS ix_appointments_master_id ON appointments(master_id);
-CREATE INDEX IF NOT EXISTS ix_appointments_client_id ON appointments(client_id);
-CREATE INDEX IF NOT EXISTS ix_appointments_resource_id ON appointments(resource_id);
-CREATE INDEX IF NOT EXISTS ix_appointments_start_time ON appointments(start_time);
-
--- Отзывы
-CREATE INDEX IF NOT EXISTS ix_reviews_master_id ON reviews(master_id);
-CREATE INDEX IF NOT EXISTS ix_reviews_client_id ON reviews(client_id);
-
--- ============================================================================
--- CONSTRAINTS: ЗАЩИТА ОТ OVERLAP ЗАПИСЕЙ
--- ============================================================================
-
--- Мастер не может быть записан дважды в одно время
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ex_appointments_master_time_overlap'
-    ) THEN
-        ALTER TABLE appointments
-            ADD CONSTRAINT ex_appointments_master_time_overlap
-            EXCLUDE USING gist (
-                master_id WITH =,
-                tstzrange(start_time, end_time, '[)') WITH &&
-            )
-            WHERE (status <> 'cancelled');
-    END IF;
-END $$;
-
-COMMENT ON CONSTRAINT ex_appointments_master_time_overlap ON appointments IS 'Мастер не может иметь пересекающиеся записи (кроме отменённых)';
-
--- Ресурс не может быть занят дважды в одно время
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'ex_appointments_resource_time_overlap'
-    ) THEN
-        ALTER TABLE appointments
-            ADD CONSTRAINT ex_appointments_resource_time_overlap
-            EXCLUDE USING gist (
-                resource_id WITH =,
-                tstzrange(start_time, end_time, '[)') WITH &&
-            )
-            WHERE (resource_id IS NOT NULL AND status <> 'cancelled');
-    END IF;
-END $$;
-
-COMMENT ON CONSTRAINT ex_appointments_resource_time_overlap ON appointments IS 'Ресурс не может быть занят дважды в одно время (кроме отменённых)';
-
--- ============================================================================
--- ТРИГГЕР: АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ updated_at
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION nbeauty.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
 BEGIN
     NEW.updated_at = now();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-COMMENT ON FUNCTION update_updated_at_column IS 'Автоматически обновляет updated_at при изменении записи';
-
--- Применяем к таблицам с updated_at
-DO $$
-DECLARE
-    tbl TEXT;
+CREATE OR REPLACE FUNCTION nbeauty.trigger_generate_invite_code()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
 BEGIN
-    FOR tbl IN VALUES ('users'), ('salons'), ('resources'), ('services'), ('appointments')
-    LOOP
-        EXECUTE format('
-            CREATE TRIGGER trigger_%1$s_updated_at
-            BEFORE UPDATE ON %1$s
-            FOR EACH ROW
-            EXECUTE FUNCTION update_updated_at_column()
-        ', tbl);
-    END LOOP;
-END $$;
+    IF NEW.invite_code IS NULL OR btrim(NEW.invite_code) = '' THEN
+        NEW.invite_code := nbeauty.generate_invite_code();
+    END IF;
 
--- ============================================================================
--- ФУНКЦИЯ: РЕГУЛИРОВКА РЕЙТИНГА МАСТЕРА
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION recalculate_master_rating(p_master_id BIGINT)
-RETURNS VOID AS $$
-DECLARE
-    avg_rating NUMERIC(3, 2);
-    review_cnt INTEGER;
-BEGIN
-    SELECT COALESCE(AVG(rating), 0), COUNT(*)
-    INTO avg_rating, review_cnt
-    FROM reviews
-    WHERE master_id = p_master_id;
-
-    UPDATE users
-    SET rating = avg_rating,
-        review_count = review_cnt
-    WHERE tg_id = p_master_id;
-END;
-$$ LANGUAGE plpgsql;
-
-COMMENT ON FUNCTION recalculate_master_rating IS 'Пересчитывает средний рейтинг и количество отзывов мастера';
-
-CREATE OR REPLACE FUNCTION trigger_recalculate_master_rating()
-RETURNS TRIGGER AS $$
-BEGIN
-    PERFORM recalculate_master_rating(NEW.master_id);
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-COMMENT ON FUNCTION trigger_recalculate_master_rating IS 'Триггер-обёртка для пересчёта рейтинга мастера после изменения reviews';
+CREATE TABLE nbeauty.users (
+    tg_id bigint NOT NULL,
+    full_name varchar(255) NOT NULL,
+    username varchar(255),
+    role varchar(32) DEFAULT 'client'::varchar NOT NULL,
+    avatar varchar(255),
+    specialty varchar(255),
+    rating numeric(3,2) DEFAULT 0 NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT chk_users_rating CHECK (rating >= 0 AND rating <= 5),
+    CONSTRAINT users_role_check CHECK (role IN ('client', 'master')),
+    CONSTRAINT users_pkey PRIMARY KEY (tg_id),
+    CONSTRAINT users_username_key UNIQUE (username)
+);
 
--- Триггер для авто-обновления рейтинга при добавлении/изменении отзыва
-CREATE OR REPLACE TRIGGER trigger_reviews_update_rating
-    AFTER INSERT OR UPDATE ON reviews
-    FOR EACH ROW
-    EXECUTE FUNCTION trigger_recalculate_master_rating();
+CREATE TABLE nbeauty.platform_admins (
+    user_id bigint NOT NULL,
+    granted_by bigint,
+    granted_at timestamptz DEFAULT now() NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    CONSTRAINT platform_admins_pkey PRIMARY KEY (user_id),
+    CONSTRAINT platform_admins_user_id_fkey FOREIGN KEY (user_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE,
+    CONSTRAINT platform_admins_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES nbeauty.users(tg_id) ON DELETE SET NULL
+);
+
+CREATE TABLE nbeauty.salons (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name varchar(255) NOT NULL,
+    owner_id bigint NOT NULL,
+    invite_code varchar(255) NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT salons_pkey PRIMARY KEY (id),
+    CONSTRAINT salons_invite_code_key UNIQUE (invite_code),
+    CONSTRAINT salons_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE
+);
+
+CREATE TABLE nbeauty.salon_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    salon_id uuid NOT NULL,
+    user_id bigint NOT NULL,
+    role varchar(32) DEFAULT 'master'::varchar NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT salon_members_pkey PRIMARY KEY (id),
+    CONSTRAINT salon_members_role_check CHECK (role IN ('admin', 'master')),
+    CONSTRAINT uq_salon_members_salon_user UNIQUE (salon_id, user_id),
+    CONSTRAINT salon_members_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES nbeauty.salons(id) ON DELETE CASCADE,
+    CONSTRAINT salon_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE
+);
+
+CREATE TABLE nbeauty.resources (
+    id bigint GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+    salon_id uuid NOT NULL,
+    name varchar(255) NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT resources_pkey PRIMARY KEY (id),
+    CONSTRAINT uq_resources_salon_name UNIQUE (salon_id, name),
+    CONSTRAINT resources_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES nbeauty.salons(id) ON DELETE CASCADE
+);
+
+CREATE TABLE nbeauty.services (
+    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+    master_id bigint NOT NULL,
+    salon_id uuid,
+    resource_id integer,
+    name varchar(255) NOT NULL,
+    duration integer NOT NULL,
+    price integer NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT services_pkey PRIMARY KEY (id),
+    CONSTRAINT chk_services_duration_positive CHECK (duration > 0),
+    CONSTRAINT chk_services_price_non_negative CHECK (price >= 0),
+    CONSTRAINT services_master_id_fkey FOREIGN KEY (master_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE,
+    CONSTRAINT services_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES nbeauty.salons(id) ON DELETE SET NULL,
+    CONSTRAINT services_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES nbeauty.resources(id) ON DELETE SET NULL
+);
+
+CREATE TABLE nbeauty.master_schedules (
+    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+    master_id bigint NOT NULL,
+    salon_id uuid,
+    day_of_week integer NOT NULL,
+    is_enabled boolean DEFAULT true NOT NULL,
+    start_time time NOT NULL,
+    end_time time NOT NULL,
+    CONSTRAINT master_schedules_pkey PRIMARY KEY (id),
+    CONSTRAINT chk_master_schedules_day CHECK (day_of_week >= 0 AND day_of_week <= 6),
+    CONSTRAINT chk_master_schedules_time CHECK (start_time < end_time),
+    CONSTRAINT uq_master_schedules_master_salon_day UNIQUE (master_id, salon_id, day_of_week),
+    CONSTRAINT master_schedules_master_id_fkey FOREIGN KEY (master_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE,
+    CONSTRAINT master_schedules_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES nbeauty.salons(id) ON DELETE CASCADE
+);
+
+CREATE TABLE nbeauty.appointments (
+    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+    salon_id uuid,
+    master_id bigint NOT NULL,
+    client_id bigint NOT NULL,
+    resource_id integer,
+    service_id integer NOT NULL,
+    start_time timestamptz NOT NULL,
+    end_time timestamptz NOT NULL,
+    status varchar(32) DEFAULT 'pending'::varchar NOT NULL,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    updated_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT appointments_pkey PRIMARY KEY (id),
+    CONSTRAINT appointments_status_check CHECK (status IN ('pending', 'confirmed', 'upcoming', 'cancelled', 'completed')),
+    CONSTRAINT chk_appointments_time CHECK (start_time < end_time),
+    CONSTRAINT appointments_salon_id_fkey FOREIGN KEY (salon_id) REFERENCES nbeauty.salons(id) ON DELETE SET NULL,
+    CONSTRAINT appointments_master_id_fkey FOREIGN KEY (master_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE,
+    CONSTRAINT appointments_client_id_fkey FOREIGN KEY (client_id) REFERENCES nbeauty.users(tg_id) ON DELETE CASCADE,
+    CONSTRAINT appointments_resource_id_fkey FOREIGN KEY (resource_id) REFERENCES nbeauty.resources(id) ON DELETE SET NULL,
+    CONSTRAINT appointments_service_id_fkey FOREIGN KEY (service_id) REFERENCES nbeauty.services(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE nbeauty.reviews (
+    id integer GENERATED BY DEFAULT AS IDENTITY NOT NULL,
+    appointment_id integer NOT NULL,
+    rating integer NOT NULL,
+    comment varchar(1000),
+    created_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT reviews_pkey PRIMARY KEY (id),
+    CONSTRAINT reviews_appointment_id_key UNIQUE (appointment_id),
+    CONSTRAINT chk_reviews_rating CHECK (rating >= 1 AND rating <= 5),
+    CONSTRAINT reviews_appointment_id_fkey FOREIGN KEY (appointment_id) REFERENCES nbeauty.appointments(id) ON DELETE CASCADE
+);
+
+CREATE TABLE nbeauty.telegram_login_sessions (
+    token varchar(64) NOT NULL,
+    status varchar(32) DEFAULT 'pending'::varchar NOT NULL,
+    user_id bigint,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    expires_at timestamptz NOT NULL,
+    completed_at timestamptz,
+    CONSTRAINT telegram_login_sessions_pkey PRIMARY KEY (token),
+    CONSTRAINT telegram_login_sessions_status_check CHECK (status IN ('pending', 'completed', 'expired')),
+    CONSTRAINT telegram_login_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES nbeauty.users(tg_id) ON DELETE SET NULL
+);
+
+ALTER TABLE nbeauty.appointments
+    ADD CONSTRAINT ex_appointments_master_time_overlap
+    EXCLUDE USING gist (master_id WITH =, tstzrange(start_time, end_time, '[)') WITH &&)
+    WHERE (status <> 'cancelled');
+
+ALTER TABLE nbeauty.appointments
+    ADD CONSTRAINT ex_appointments_resource_time_overlap
+    EXCLUDE USING gist (resource_id WITH =, tstzrange(start_time, end_time, '[)') WITH &&)
+    WHERE (resource_id IS NOT NULL AND status <> 'cancelled');
+
+CREATE INDEX idx_telegram_login_sessions_status_expires_at
+    ON nbeauty.telegram_login_sessions (status, expires_at);
+
+CREATE INDEX idx_telegram_login_sessions_user_id
+    ON nbeauty.telegram_login_sessions (user_id);
+
+CREATE OR REPLACE FUNCTION nbeauty.recalculate_master_rating(p_master_id bigint)
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    avg_rating numeric(3,2);
+BEGIN
+    SELECT COALESCE(round(avg(r.rating)::numeric, 2), 0)
+    INTO avg_rating
+    FROM nbeauty.reviews r
+    JOIN nbeauty.appointments a ON a.id = r.appointment_id
+    JOIN nbeauty.services s ON s.id = a.service_id
+    WHERE s.master_id = p_master_id;
+
+    UPDATE nbeauty.users
+    SET rating = avg_rating,
+        updated_at = now()
+    WHERE tg_id = p_master_id
+      AND role = 'master';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION nbeauty.trigger_recalculate_master_rating()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    old_master_id bigint;
+    new_master_id bigint;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT master_id INTO new_master_id FROM nbeauty.appointments WHERE id = NEW.appointment_id;
+        PERFORM nbeauty.recalculate_master_rating(new_master_id);
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'UPDATE' THEN
+        SELECT master_id INTO old_master_id FROM nbeauty.appointments WHERE id = OLD.appointment_id;
+        SELECT master_id INTO new_master_id FROM nbeauty.appointments WHERE id = NEW.appointment_id;
+
+        IF old_master_id <> new_master_id THEN
+            PERFORM nbeauty.recalculate_master_rating(old_master_id);
+            PERFORM nbeauty.recalculate_master_rating(new_master_id);
+        ELSE
+            PERFORM nbeauty.recalculate_master_rating(new_master_id);
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        SELECT master_id INTO old_master_id FROM nbeauty.appointments WHERE id = OLD.appointment_id;
+        PERFORM nbeauty.recalculate_master_rating(old_master_id);
+        RETURN OLD;
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trigger_appointments_updated_at
+    BEFORE UPDATE ON nbeauty.appointments
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.update_updated_at_column();
+
+CREATE TRIGGER trigger_resources_updated_at
+    BEFORE UPDATE ON nbeauty.resources
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.update_updated_at_column();
+
+CREATE TRIGGER trigger_reviews_recalculate_rating
+    AFTER INSERT OR UPDATE OR DELETE ON nbeauty.reviews
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.trigger_recalculate_master_rating();
+
+CREATE TRIGGER trigger_salons_invite_code
+    BEFORE INSERT ON nbeauty.salons
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.trigger_generate_invite_code();
+
+CREATE TRIGGER trigger_salons_updated_at
+    BEFORE UPDATE ON nbeauty.salons
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.update_updated_at_column();
+
+CREATE TRIGGER trigger_services_updated_at
+    BEFORE UPDATE ON nbeauty.services
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.update_updated_at_column();
+
+CREATE TRIGGER trigger_users_updated_at
+    BEFORE UPDATE ON nbeauty.users
+    FOR EACH ROW EXECUTE FUNCTION nbeauty.update_updated_at_column();
+
+COMMENT ON TABLE nbeauty.users IS 'Пользователи Telegram. role определяет режим: мастер (оказывает услуги) или клиент (записывается)';
+COMMENT ON TABLE nbeauty.platform_admins IS 'Глобальные администраторы всей платформы (не салона!)';
+COMMENT ON TABLE nbeauty.salons IS 'Салоны/студии. Владелец автоматически получает роль admin в salon_members';
+COMMENT ON TABLE nbeauty.salon_members IS 'Участники салона: admin (управляет) или master (работает)';
+COMMENT ON TABLE nbeauty.resources IS 'Ресурсы салона: кабинеты, кресла, оборудование — могут бронироваться вместе с записью';
+COMMENT ON TABLE nbeauty.services IS 'Услуги мастеров. price — для отображения клиенту (без финансовой логики)';
+COMMENT ON TABLE nbeauty.master_schedules IS 'Рабочее расписание мастеров: дни недели и часы работы в салоне';
+COMMENT ON TABLE nbeauty.appointments IS 'Записи клиентов к мастерам. status отслеживает жизненный цикл записи';
+COMMENT ON TABLE nbeauty.reviews IS 'Отзывы клиентов о мастерах. Один отзыв = одна завершённая запись';

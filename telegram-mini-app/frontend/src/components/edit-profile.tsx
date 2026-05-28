@@ -42,9 +42,9 @@ export function EditProfile({
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Проверяем размер (макс 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Размер файла не должен превышать 5MB")
+    // Проверяем размер (макс 15MB)
+    if (file.size > 15 * 1024 * 1024) {
+      setError("Размер файла не должен превышать 15MB")
       return
     }
 

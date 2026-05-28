@@ -70,7 +70,7 @@ function formatSlotTime(value: string) {
 // Функция для добавления/вычитания минут к времени
 function addMinutesToTime(timeStr: string, minutes: number): string {
   const [hours, mins] = timeStr.split(":").map(Number)
-  let totalMinutes = hours * 60 + mins + minutes
+  const totalMinutes = hours * 60 + mins + minutes
   
   // Обработка перехода через границы часов
   const newHours = Math.floor(totalMinutes / 60) % 24

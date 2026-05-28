@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Clock, Settings, ChevronRight, ArrowLeftRight, UserCheck, Building2, Users, Crown, Sparkles, Plus, LogIn } from "lucide-react"
+import { Clock, Settings, ChevronRight, ArrowLeftRight, Building2, Users, Crown, Sparkles, Plus, LogIn, ShieldCheck } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { apiSalons } from "@/lib/api"
 import { mapSalons } from "@/lib/mappers"
@@ -18,6 +18,8 @@ interface ProfileScreenProps {
   onToggleRole: () => void
   onBecomeMaster: () => void
   onNavigate: (screen: "working-hours" | "salon-dashboard" | "edit-profile") => void
+  onOpenPlatformAdmin?: () => void
+  isPlatformAdmin?: boolean
   onSelectSalon: (salon: Salon) => void
   onSalonsChange: (salons: Salon[]) => void
 }
@@ -33,6 +35,8 @@ export function ProfileScreen({
   onToggleRole,
   onBecomeMaster,
   onNavigate,
+  onOpenPlatformAdmin,
+  isPlatformAdmin = false,
   onSelectSalon,
   onSalonsChange,
 }: ProfileScreenProps) {
@@ -260,6 +264,23 @@ export function ProfileScreen({
         className="flex flex-col gap-2"
       >
         <p className="text-xs font-medium text-muted-foreground">Общие</p>
+        {isPlatformAdmin && onOpenPlatformAdmin ? (
+          <button
+            onClick={onOpenPlatformAdmin}
+            className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-3 text-left transition-all active:scale-[0.98] hover:bg-primary/10"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <span className="text-sm font-medium text-card-foreground">Глобальный админ</span>
+                <p className="text-xs text-muted-foreground">Аналитика и управление платформой</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+        ) : null}
         <button
           onClick={() => onNavigate("edit-profile")}
           className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98] hover:bg-accent"

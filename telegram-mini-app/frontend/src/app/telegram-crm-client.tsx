@@ -10,6 +10,7 @@ import { DiscoveryScreen } from "@/components/discovery-screen"
 import { EditProfile } from "@/components/edit-profile"
 import { MasterDashboard } from "@/components/master-dashboard"
 import { MyBookingsScreen } from "@/components/my-bookings"
+import { PlatformAdminScreen } from "@/components/platform-admin-screen"
 import { ProfileScreen } from "@/components/profile-screen"
 import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary"
 import { SalonDashboard } from "@/components/salon-dashboard"
@@ -19,6 +20,7 @@ import {
   ApiError,
   apiAppointments,
   apiMasters,
+  apiPlatformAdmin,
   apiProfile,
   apiResources,
   apiSalons,
@@ -70,6 +72,7 @@ const PRESERVED_SCREENS = new Set<Screen>([
   "salon-dashboard",
   "working-hours",
   "service-management",
+  "platform-admin",
 ])
 
 function dedupeAppointments(appointments: Appointment[]) {
@@ -115,6 +118,7 @@ export default function TelegramCRMClient() {
   const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null)
   const [appLoading, setAppLoading] = useState(false)
   const [dataError, setDataError] = useState<string | null>(null)
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
 
   const currentSalon = salons.find((salon) =>
     salon.members.some((member) => member.masterId === currentUserId),
@@ -190,6 +194,7 @@ export default function TelegramCRMClient() {
         schedulesResult,
         masterAppointmentsResult,
         clientAppointmentsResult,
+        platformAdminResult,
       ] = await Promise.allSettled([
         apiMasters.list(),
         apiSalons.my(),
@@ -197,6 +202,7 @@ export default function TelegramCRMClient() {
         apiSchedules.my(),
         apiAppointments.my("master"),
         apiAppointments.my("client"),
+        apiPlatformAdmin.me(),
       ])
 
       const rejectedResults = [
@@ -206,6 +212,7 @@ export default function TelegramCRMClient() {
         schedulesResult,
         masterAppointmentsResult,
         clientAppointmentsResult,
+        platformAdminResult,
       ].filter((result) => result.status === "rejected")
 
       const unauthorizedResult = rejectedResults.find(
@@ -243,8 +250,9 @@ export default function TelegramCRMClient() {
         ...(clientAppointmentsResult.status === "fulfilled" ? mapAppointments(clientAppointmentsResult.value) : []),
       ])
       setAppointments(nextAppointments)
+      setIsPlatformAdmin(platformAdminResult.status === "fulfilled" ? platformAdminResult.value.isAdmin : false)
 
-      if (rejectedResults.length > 0 && rejectedResults.length < 6) {
+      if (rejectedResults.length > 0 && rejectedResults.length < 7) {
         setDataError("Часть данных не загрузилась. Основные функции доступны, но стоит проверить backend-логи.")
       }
     } catch (error) {
@@ -350,6 +358,50 @@ export default function TelegramCRMClient() {
     }
   }, [])
 
+  const updateAppointmentFromApi = useCallback((appointment: Appointment) => {
+    setAppointments((previous) =>
+      previous.map((existing) => (existing.id === appointment.id ? appointment : existing)),
+    )
+  }, [])
+
+  const handleConfirmAppointment = useCallback(async (id: string) => {
+    if (IS_DEV_AUTH_BYPASS) {
+      setAppointments((previous) =>
+        previous.map((appointment) =>
+          appointment.id === id ? { ...appointment, status: "confirmed" } : appointment,
+        ),
+      )
+      return
+    }
+
+    try {
+      const confirmed = await apiAppointments.confirm(Number(id))
+      updateAppointmentFromApi(mapAppointment(confirmed))
+    } catch (error) {
+      console.error("Confirm appointment failed:", error)
+      setDataError("Не удалось подтвердить запись.")
+    }
+  }, [updateAppointmentFromApi])
+
+  const handleCompleteAppointment = useCallback(async (id: string) => {
+    if (IS_DEV_AUTH_BYPASS) {
+      setAppointments((previous) =>
+        previous.map((appointment) =>
+          appointment.id === id ? { ...appointment, status: "completed" } : appointment,
+        ),
+      )
+      return
+    }
+
+    try {
+      const completed = await apiAppointments.complete(Number(id))
+      updateAppointmentFromApi(mapAppointment(completed))
+    } catch (error) {
+      console.error("Complete appointment failed:", error)
+      setDataError("Не удалось завершить запись.")
+    }
+  }, [updateAppointmentFromApi])
+
   const handleSelectMaster = useCallback((master: Master) => {
     setSelectedMaster(master)
     setScreen("booking-wizard")
@@ -402,7 +454,7 @@ export default function TelegramCRMClient() {
       console.error("Book appointment failed:", error)
       setDataError("Не удалось создать запись. Проверь свободный слот и попробуй ещё раз.")
     }
-  }, [currentUserId, loadAppData])
+  }, [currentUserId, currentUserName, loadAppData])
 
   const handleSelectSalon = useCallback((salon: Salon) => {
     setSelectedSalon(salon)
@@ -560,6 +612,9 @@ export default function TelegramCRMClient() {
                   currentMasterId={currentUserId}
                   selectedDate={selectedDate}
                   onSelectDate={setSelectedDate}
+                  onCancel={handleCancelAppointment}
+                  onConfirm={handleConfirmAppointment}
+                  onComplete={handleCompleteAppointment}
                 />
               </motion.div>
             ) : null}
@@ -643,7 +698,15 @@ export default function TelegramCRMClient() {
                   onNavigate={(nextScreen) => setScreen(nextScreen)}
                   onSelectSalon={handleSelectSalon}
                   onSalonsChange={setSalons}
+                  isPlatformAdmin={isPlatformAdmin}
+                  onOpenPlatformAdmin={() => setScreen("platform-admin")}
                 />
+              </motion.div>
+            ) : null}
+
+            {screen === "platform-admin" && isPlatformAdmin ? (
+              <motion.div key="platform-admin" {...pageVariants} transition={{ duration: 0.2 }}>
+                <PlatformAdminScreen onBack={() => setScreen("profile")} />
               </motion.div>
             ) : null}
 

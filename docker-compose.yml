@@ -1,15 +1,16 @@
 services:
   db:
+    profiles: ["docker-db"]
     image: postgres:16
     environment:
-      POSTGRES_DB: nbeauty
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-nbeauty_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nbeauty_dev_password}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
-      # Versioned volume name forces a clean local cluster after credential/schema resets.
-      - db_data_v2:/var/lib/postgresql/data
+      # Versioned volume name forces a clean local cluster after schema resets.
+      - db_data_v3:/var/lib/postgresql/data
       - ./backend/migrations:/docker-entrypoint-initdb.d:ro
 
   backend:
@@ -18,8 +19,8 @@ services:
       dockerfile: ./backend/Dockerfile
     env_file:
       - .env
-    depends_on:
-      - db
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+asyncpg://nbeauty_app:app_password@host.docker.internal:5432/postgres}
     ports:
       - "8000:8000"
 
@@ -30,8 +31,8 @@ services:
     command: ["python", "-m", "bot.main"]
     env_file:
       - .env
-    depends_on:
-      - db
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+asyncpg://nbeauty_app:app_password@host.docker.internal:5432/postgres}
 
 volumes:
-  db_data_v2:
+  db_data_v3:

@@ -1,30 +1,36 @@
-# Database migrations
+# Database init / future migration reference
 
-PostgreSQL init scripts live here. `docker-compose.yml` mounts this directory to
-`/docker-entrypoint-initdb.d`, so `*.sql` files run automatically when a fresh
-`db_data_v2` volume is created.
+`001_initial_schema.sql` is kept as a consolidated reference/fresh-init script
+for future rebuilds, new developer machines, CI databases, or emergency schema
+comparison. The current local PostgreSQL database and schema may already exist
+outside Docker; in that case do not run this script automatically against it.
 
-The Compose volume is intentionally versioned. If you still have an older local
-`db_data` volume with incompatible Postgres credentials or an outdated cluster,
-Docker Compose will now create a fresh `db_data_v2` volume instead of trying to
-reuse the stale one.
+The script is based on
+`/Users/nic_piter/Desktop/nbeauty_dump_last.sql`. The target database is
+`postgres`; application tables live in schema `nbeauty`.
 
-For an existing database in Docker Compose, apply the missing migration files
-manually. For the current auth flow, at minimum:
-
-```bash
-docker compose exec -T db \
-  psql -U postgres -d nbeauty \
-  -f /docker-entrypoint-initdb.d/002_telegram_login_sessions.sql
-```
-
-If you apply migrations from the host instead of Docker, use a regular Postgres
-DSN for `psql` (without `+asyncpg`), for example:
+If you intentionally want a disposable Docker database from this schema:
 
 ```bash
-psql "postgresql://postgres:postgres@localhost:5432/nbeauty" \
-  -f backend/migrations/002_telegram_login_sessions.sql
+docker compose --profile docker-db up -d db
 ```
 
-If the database was already initialized with an older schema, prefer creating
-proper incremental migrations instead of editing `001_initial_schema.sql`.
+Docker publishes PostgreSQL on `localhost:5433` by default to avoid conflicting
+with a native PostgreSQL server on `localhost:5432`.
+
+Primary native local database expected by the app:
+
+- Host: `localhost`
+- Port: `5432`
+- Database: `postgres`
+- Schema: `nbeauty`
+- Role: `nbeauty_app`
+- Password: `app_password`
+
+DBeaver connection for Docker database:
+
+- Host: `localhost`
+- Port: `5433`
+- Database: `postgres`
+- User/password: values from root `.env` or `.env.example`
+- Schema to inspect: `nbeauty`

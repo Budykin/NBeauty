@@ -2,7 +2,8 @@
 
 import { useMemo, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Clock, User, Box } from "lucide-react"
+import { Clock, Box } from "lucide-react"
+import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import type { Salon, Appointment } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -172,6 +173,7 @@ export function SalonScheduleView({ salon, appointments, selectedDate, onSelectD
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">{apt.service.name}</span>
+                            <AppointmentStatusBadge status={apt.status} className="text-[10px]" />
                             {resource && (
                               <span className="flex items-center gap-1 rounded bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground">
                                 <Box className="h-2.5 w-2.5" />

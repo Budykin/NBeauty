@@ -43,7 +43,10 @@ async def upsert_telegram_user(
         await session.flush()
         return user
 
-    user.full_name = full_name or user.full_name
+    # Важно: если пользователь уже есть в БД, НЕ перетираем его имя данными из Telegram.
+    # Пользователь мог изменить full_name в настройках приложения, и это значение — source of truth.
+    if not user.full_name or user.full_name == "Неизвестный пользователь":
+        user.full_name = full_name or user.full_name
     if safe_username is not None:
         user.username = safe_username
     if user.avatar is None and avatar is not None:
