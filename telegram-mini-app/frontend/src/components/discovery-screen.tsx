@@ -85,7 +85,7 @@ export function DiscoveryScreen({ masters, onSelectMaster, profileMasterId }: Di
         throw new Error("Missing bot username")
       }
 
-      masterLink = `https://t.me/${botUsername}/app?startapp=master_${master.id}`
+      masterLink = `https://t.me/${botUsername}?startapp=master_${master.id}`
       const lines = [
         `Мастер: ${master.name}`,
         master.username ? `@${master.username}` : null,
