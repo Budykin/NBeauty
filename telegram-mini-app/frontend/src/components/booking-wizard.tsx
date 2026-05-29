@@ -139,6 +139,28 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
       .sort((left, right) => toMinutes(left.start) - toMinutes(right.start))
   }, [availableSlots5, selectedBaseStart])
 
+  const centeredRefinedSlots = useMemo(() => {
+    if (refinedSlots.length === 0) return []
+
+    const fallbackIndex = selectedBaseStart
+      ? refinedSlots.findIndex((slot) => slot.start === selectedBaseStart)
+      : -1
+    const selectedIndex = selectedSlot
+      ? refinedSlots.findIndex((slot) => slot.start === selectedSlot.start && slot.end === selectedSlot.end)
+      : -1
+    const anchorIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex >= 0 ? fallbackIndex : 0
+
+    const windowSize = 5
+    const half = Math.floor(windowSize / 2)
+    let start = Math.max(anchorIndex - half, 0)
+    const end = Math.min(start + windowSize, refinedSlots.length)
+    if (end - start < windowSize) {
+      start = Math.max(end - windowSize, 0)
+    }
+
+    return refinedSlots.slice(start, end)
+  }, [refinedSlots, selectedBaseStart, selectedSlot])
+
   useEffect(() => {
     if (!selectedService || !selectedDateString || !selectedDateIsWorking) {
       setAvailableSlots15([])
@@ -497,15 +519,15 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                   ))}
                 </div>
 
-                {selectedBaseStart && refinedSlots.length > 0 ? (
+                {selectedBaseStart && centeredRefinedSlots.length > 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col gap-3"
                   >
                     <p className="text-xs font-medium text-muted-foreground">Уточните время</p>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {refinedSlots.map((slot) => (
+                    <div className="flex justify-center gap-2">
+                      {centeredRefinedSlots.map((slot) => (
                         <button
                           key={`${slot.start}-${slot.end}`}
                           onClick={() => setSelectedSlot(slot)}
