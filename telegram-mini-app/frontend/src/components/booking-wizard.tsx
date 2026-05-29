@@ -27,12 +27,9 @@ const MONTHS_RU = [
 const WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 function getCalendarDays(year: number, month: number) {
-  // JavaScript getDay() возвращает 0-6 где 0=воскресенье, 6=суббота
-  // Нам нужно понедельник в начале (0), воскресенье в конце (6)
-  // Поэтому вычитаем 1 и берём модуль 7
   let firstDay = new Date(year, month, 1).getDay() - 1
-  if (firstDay < 0) firstDay = 6 // Воскресенье это 6
-  
+  if (firstDay < 0) firstDay = 6
+
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const days: (number | null)[] = []
 
@@ -57,62 +54,67 @@ function formatSlotTime(value: string) {
   return value
 }
 
-// Функция для добавления/вычитания минут к времени
-function addMinutesToTime(timeStr: string, minutes: number): string {
-  const [hours, mins] = timeStr.split(":").map(Number)
-  const totalMinutes = hours * 60 + mins + minutes
-  
-  // Обработка перехода через границы часов
-  const newHours = Math.floor(totalMinutes / 60) % 24
-  const newMins = totalMinutes % 60
-  
-  return `${String(newHours).padStart(2, "0")}:${String(newMins).padStart(2, "0")}`
+function toMinutes(timeStr: string) {
+  const [hours, minutes] = timeStr.split(":").map(Number)
+  return hours * 60 + minutes
 }
 
-// Функция для создания соседних слотов с шагом 10 минут
-function generateAdjacentSlots(
-  slot: TimeSlot,
-  allSlots: TimeSlot[],
-  stepMinutes: number = 10
-): TimeSlot[] {
-  const result: TimeSlot[] = []
-  const currentIndex = allSlots.findIndex(s => s.start === slot.start)
-  
-  if (currentIndex === -1) return [slot]
-  
-  const isFirst = currentIndex === 0
-  const isLast = currentIndex === allSlots.length - 1
-  
-  // Добавляем слот слева (если не первый)
-  if (!isFirst) {
-    const prevSlot: TimeSlot = {
-      start: addMinutesToTime(slot.start, -stepMinutes),
-      end: slot.start,
-    }
-    result.push(prevSlot)
+function addMinutes(timeStr: string, deltaMinutes: number) {
+  const total = toMinutes(timeStr) + deltaMinutes
+  const hours = Math.floor(total / 60)
+  const minutes = total % 60
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
+}
+
+function isFutureSlot(dateStr: string, timeStr: string) {
+  const [year, month, day] = dateStr.split("-").map(Number)
+  const [hours, minutes] = timeStr.split(":").map(Number)
+  const slotDate = new Date(year, month - 1, day, hours, minutes, 0, 0)
+  return slotDate.getTime() > Date.now()
+}
+
+function filterFutureSlots(slots: TimeSlot[], dateStr: string) {
+  return slots.filter((slot) => isFutureSlot(dateStr, slot.start))
+}
+
+function pickNearestSlot(reference: string, slots: TimeSlot[]): TimeSlot | null {
+  if (slots.length === 0) return null
+
+  const referenceMinutes = toMinutes(reference)
+  return slots.reduce((best, slot) => {
+    const bestDiff = Math.abs(toMinutes(best.start) - referenceMinutes)
+    const nextDiff = Math.abs(toMinutes(slot.start) - referenceMinutes)
+    if (nextDiff < bestDiff) return slot
+    if (nextDiff === bestDiff && toMinutes(slot.start) < toMinutes(best.start)) return slot
+    return best
+  })
+}
+
+function generateMockSlots(start: string, end: string, stepMinutes: number, durationMinutes: number): TimeSlot[] {
+  const slots: TimeSlot[] = []
+  let cursor = toMinutes(start)
+  const endMinutes = toMinutes(end)
+
+  while (cursor + durationMinutes <= endMinutes) {
+    const slotStart = `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`
+    slots.push({
+      start: slotStart,
+      end: addMinutes(slotStart, durationMinutes),
+    })
+    cursor += stepMinutes
   }
-  
-  // Добавляем выбранный слот
-  result.push(slot)
-  
-  // Добавляем слот справа (если не последний)
-  if (!isLast) {
-    const nextSlot: TimeSlot = {
-      start: addMinutesToTime(slot.start, stepMinutes),
-      end: addMinutesToTime(slot.end, stepMinutes),
-    }
-    result.push(nextSlot)
-  }
-  
-  return result
+
+  return slots
 }
 
 export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
   const [step, setStep] = useState(0)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedBaseStart, setSelectedBaseStart] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
+  const [availableSlots15, setAvailableSlots15] = useState<TimeSlot[]>([])
+  const [availableSlots5, setAvailableSlots5] = useState<TimeSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotError, setSlotError] = useState<string | null>(null)
 
@@ -128,9 +130,20 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
     : undefined
   const selectedDateIsWorking = selectedWorkingDay?.enabled ?? true
 
+  const refinedSlots = useMemo(() => {
+    if (!selectedBaseStart) return []
+
+    const baseMinutes = toMinutes(selectedBaseStart)
+    return availableSlots5
+      .filter((slot) => Math.abs(toMinutes(slot.start) - baseMinutes) <= 30)
+      .sort((left, right) => toMinutes(left.start) - toMinutes(right.start))
+  }, [availableSlots5, selectedBaseStart])
+
   useEffect(() => {
     if (!selectedService || !selectedDateString || !selectedDateIsWorking) {
-      setAvailableSlots([])
+      setAvailableSlots15([])
+      setAvailableSlots5([])
+      setSelectedBaseStart(null)
       setSelectedSlot(null)
       setSlotError(null)
       return
@@ -144,33 +157,47 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
 
       try {
         if (IS_DEV_AUTH_BYPASS) {
-          setAvailableSlots([
-            { start: "09:00", end: "10:00" },
-            { start: "10:30", end: "11:30" },
-            { start: "12:00", end: "13:00" },
-            { start: "15:00", end: "16:00" },
-            { start: "17:00", end: "18:00" },
-          ])
+          const duration = Math.max(1, selectedService.duration)
+          const dev15 = generateMockSlots("09:00", "18:00", 15, duration)
+          const dev5 = generateMockSlots("09:00", "18:00", 5, duration)
+          if (cancelled) return
+          setAvailableSlots15(filterFutureSlots(dev15, selectedDateString))
+          setAvailableSlots5(filterFutureSlots(dev5, selectedDateString))
           return
         }
 
-        const slots = await apiMasters.slots(
-          Number(master.id),
-          Number(selectedService.id),
-          selectedDateString,
-        )
+        const [slots15Raw, slots5Raw] = await Promise.all([
+          apiMasters.slots(
+            Number(master.id),
+            Number(selectedService.id),
+            selectedDateString,
+            15,
+          ),
+          apiMasters.slots(
+            Number(master.id),
+            Number(selectedService.id),
+            selectedDateString,
+            5,
+          ),
+        ])
 
         if (cancelled) return
 
-        setAvailableSlots(
-          slots.map((slot) => ({
-            start: formatSlotTime(slot.start),
-            end: formatSlotTime(slot.end),
-          })),
-        )
+        const mapped15 = slots15Raw.map((slot) => ({
+          start: formatSlotTime(slot.start),
+          end: formatSlotTime(slot.end),
+        }))
+        const mapped5 = slots5Raw.map((slot) => ({
+          start: formatSlotTime(slot.start),
+          end: formatSlotTime(slot.end),
+        }))
+
+        setAvailableSlots15(filterFutureSlots(mapped15, selectedDateString))
+        setAvailableSlots5(filterFutureSlots(mapped5, selectedDateString))
       } catch {
         if (!cancelled) {
-          setAvailableSlots([])
+          setAvailableSlots15([])
+          setAvailableSlots5([])
           setSlotError("Не удалось получить свободные слоты. Попробуй выбрать другую дату.")
         }
       } finally {
@@ -186,6 +213,39 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
       cancelled = true
     }
   }, [master.id, selectedDateIsWorking, selectedDateString, selectedService])
+
+  useEffect(() => {
+    setSelectedBaseStart((previous) => {
+      if (!previous) return previous
+      return availableSlots15.some((slot) => slot.start === previous) ? previous : null
+    })
+
+    setSelectedSlot((previous) => {
+      if (!previous) return previous
+      return availableSlots5.some((slot) => slot.start === previous.start && slot.end === previous.end)
+        ? previous
+        : null
+    })
+  }, [availableSlots15, availableSlots5])
+
+  useEffect(() => {
+    if (!selectedBaseStart) {
+      setSelectedSlot(null)
+      return
+    }
+
+    if (refinedSlots.length === 0) {
+      setSelectedSlot(null)
+      return
+    }
+
+    setSelectedSlot((previous) => {
+      if (previous && refinedSlots.some((slot) => slot.start === previous.start && slot.end === previous.end)) {
+        return previous
+      }
+      return pickNearestSlot(selectedBaseStart, refinedSlots)
+    })
+  }, [refinedSlots, selectedBaseStart])
 
   function isDateDisabled(day: number) {
     const date = new Date(viewYear, viewMonth, day)
@@ -270,6 +330,7 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                 onClick={() => {
                   setSelectedService(service)
                   setSelectedDate(null)
+                  setSelectedBaseStart(null)
                   setSelectedSlot(null)
                   setStep(1)
                 }}
@@ -366,6 +427,7 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                     disabled={disabled}
                     onClick={() => {
                       setSelectedDate(new Date(viewYear, viewMonth, day))
+                      setSelectedBaseStart(null)
                       setSelectedSlot(null)
                       setStep(2)
                     }}
@@ -408,7 +470,7 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
               </div>
             ) : null}
 
-            {!slotsLoading && !slotError && availableSlots.length === 0 ? (
+            {!slotsLoading && !slotError && availableSlots15.length === 0 ? (
               <div className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
                 {selectedDateIsWorking
                   ? "На выбранную дату нет свободных слотов."
@@ -416,17 +478,16 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
               </div>
             ) : null}
 
-            {!slotsLoading && availableSlots.length > 0 ? (
+            {!slotsLoading && availableSlots15.length > 0 ? (
               <div className="flex flex-col gap-3">
-                {/* Основная сетка слотов */}
                 <div className="grid grid-cols-3 gap-2">
-                  {availableSlots.map((slot) => (
+                  {availableSlots15.map((slot) => (
                     <button
                       key={`${slot.start}-${slot.end}`}
-                      onClick={() => setSelectedSlot(slot)}
+                      onClick={() => setSelectedBaseStart(slot.start)}
                       className={cn(
                         "rounded-lg border py-2.5 text-sm font-medium transition-all",
-                        selectedSlot?.start === slot.start
+                        selectedBaseStart === slot.start
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-card text-foreground hover:bg-secondary",
                       )}
@@ -436,35 +497,28 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                   ))}
                 </div>
 
-                {/* Уточненное время - соседние слоты с шагом 10 минут */}
-                {selectedSlot ? (
+                {selectedBaseStart && refinedSlots.length > 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col gap-3"
                   >
                     <p className="text-xs font-medium text-muted-foreground">Уточните время</p>
-                    <div className="flex gap-3 justify-center">
-                      {generateAdjacentSlots(selectedSlot, availableSlots).map((slot) => {
-                        const isSelected = selectedSlot.start === slot.start
-                        const isAdjacent = selectedSlot.start !== slot.start
-                        
-                        return (
-                          <button
-                            key={`${slot.start}-${slot.end}`}
-                            onClick={() => setSelectedSlot(slot)}
-                            className={cn(
-                              "rounded-lg border px-4 py-3 text-sm font-medium transition-all",
-                              isSelected
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "border-border bg-card text-foreground hover:bg-secondary",
-                              isAdjacent && "opacity-70 hover:opacity-100",
-                            )}
-                          >
-                            {slot.start}
-                          </button>
-                        )
-                      })}
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {refinedSlots.map((slot) => (
+                        <button
+                          key={`${slot.start}-${slot.end}`}
+                          onClick={() => setSelectedSlot(slot)}
+                          className={cn(
+                            "min-w-24 rounded-lg border px-4 py-3 text-sm font-medium transition-all",
+                            selectedSlot?.start === slot.start
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-card text-foreground hover:bg-secondary",
+                          )}
+                        >
+                          {slot.start}
+                        </button>
+                      ))}
                     </div>
                   </motion.div>
                 ) : null}

@@ -104,11 +104,16 @@ async def find_slots_for_service(
 
     duration = timedelta(minutes=service.duration)
     step = timedelta(minutes=step_minutes)
+    now_local = datetime.now()
 
     slots: list[TimeSlot] = []
     current_start = work_start
 
     while current_start + duration <= work_end:
+        if target_date == now_local.date() and current_start <= now_local:
+            current_start += step
+            continue
+
         current_end = current_start + duration
 
         # Проверяем, пересекается ли интервал с занятыми
