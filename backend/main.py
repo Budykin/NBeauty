@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from common import settings
+from common import async_session_factory, settings
+from common.appointments import auto_complete_due_appointments
 
 from backend.app.api import appointments as appointments_router
 from backend.app.api import auth as auth_router
@@ -19,12 +24,47 @@ from backend.app.api import schedules as schedules_router
 from backend.app.api import services as services_router
 
 
+logger = logging.getLogger(__name__)
+AUTO_COMPLETE_INTERVAL_SECONDS = 30
+
+
+async def _auto_complete_due_appointments_loop() -> None:
+    while True:
+        try:
+            async with async_session_factory() as session:
+                completed_count = await auto_complete_due_appointments(session)
+                if completed_count:
+                    await session.commit()
+                else:
+                    await session.rollback()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Failed to auto-complete due appointments")
+
+        await asyncio.sleep(AUTO_COMPLETE_INTERVAL_SECONDS)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task = asyncio.create_task(_auto_complete_due_appointments_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
 def create_app() -> FastAPI:
     """Фабрика приложения FastAPI."""
 
     app = FastAPI(
         title="NBeauty API",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     # CORS для фронтенда (localhost и прод-домен из настроек)

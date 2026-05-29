@@ -8,6 +8,7 @@ from aiogram.enums import ParseMode
 from common.config import settings
 from bot.handlers.start import router as start_router
 from bot.handlers.master import router as master_router
+from bot.handlers.reviews import router as reviews_router
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -29,6 +30,7 @@ async def main():
     # Подключаем наши роутеры
     dp.include_router(start_router)
     dp.include_router(master_router)
+    dp.include_router(reviews_router)
 
     try:
         # Удаляем вебхуки (если были) и запускаем поллинг

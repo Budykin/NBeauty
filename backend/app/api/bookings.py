@@ -30,10 +30,7 @@ async def create_booking(
     await auto_complete_due_appointments(session)
     await session.commit()
 
-    # Фронт может прислать ISO с таймзоной (например, 2026-05-02T12:00:00+03:00).
-    # В нашей модели хранения/слотов время используется как "локальное на часах" (naive datetime),
-    # поэтому сохраняем часы/минуты как есть и игнорируем tzinfo, чтобы не было сдвига в UTC.
-    start_time = payload.start_time.replace(tzinfo=None) if payload.start_time.tzinfo else payload.start_time
+    start_time = payload.start_time
 
     # 1. Находим услугу, чтобы узнать её длительность и нужен ли ей кабинет (resource_id)
     service_query = select(Service).options(selectinload(Service.salon)).where(Service.id == payload.service_id)

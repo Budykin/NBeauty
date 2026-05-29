@@ -66,25 +66,18 @@ export function mapService(api: ApiService): Service {
 export function mapAppointment(
   api: ApiAppointment,
 ): Appointment {
-  // Извлекаем дату и время из ISO строки, не конвертируя в локальное время
-  // Это гарантирует, что время отображается как было отправлено от бэка
-  const startMatch = api.startTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-  const endMatch = api.endTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  const start = new Date(api.startTime)
+  const end = new Date(api.endTime)
 
-  if (!startMatch || !endMatch) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
     throw new Error(`Invalid appointment time format: ${api.startTime} / ${api.endTime}`)
   }
 
-  const [, startYear, startMonth, startDay, startHour, startMinute] = startMatch
-  const [, , , , endHour, endMinute] = endMatch
-
-  const dateStr = `${startYear}-${startMonth}-${startDay}`
-  const startTimeStr = `${startHour}:${startMinute}`
-  const endTimeStr = `${endHour}:${endMinute}`
+  const dateStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`
+  const startTimeStr = `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`
+  const endTimeStr = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`
 
   // Создаём заглушку Service из названия
-  const start = new Date(api.startTime)
-  const end = new Date(api.endTime)
   const service: Service = {
     id: "api-service",
     name: api.serviceName,
