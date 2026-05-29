@@ -15,7 +15,8 @@ import {
 import type { Master } from "@/lib/types"
 
 type TelegramWebAppWithShare = {
-  switchInlineQuery?: (query: string, chatTypes?: string[]) => void
+  openTelegramLink?: (url: string) => void
+  openLink?: (url: string) => void
 }
 
 interface DiscoveryScreenProps {
@@ -66,17 +67,27 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
       "NBeauty",
     ].filter(Boolean) as string[]
     const text = lines.join("\n")
+    const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(text)}`
 
     try {
       const telegramWebApp = (window as Window & { Telegram?: { WebApp?: TelegramWebAppWithShare } }).Telegram?.WebApp
-      if (telegramWebApp?.switchInlineQuery) {
-        telegramWebApp.switchInlineQuery(text, [])
+      if (telegramWebApp?.openTelegramLink) {
+        telegramWebApp.openTelegramLink(shareUrl)
+        setShareFeedback("Открылся шаринг Telegram")
+        return
+      }
+
+      if (telegramWebApp?.openLink) {
+        telegramWebApp.openLink(shareUrl)
         setShareFeedback("Открылся шаринг Telegram")
         return
       }
 
       if (navigator.share) {
-        await navigator.share({ text })
+        await navigator.share({
+          title: `Мастер ${master.name}`,
+          text,
+        })
         setShareFeedback("Профиль отправлен")
         return
       }
