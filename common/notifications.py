@@ -182,10 +182,23 @@ async def notify_review_request(
     *,
     client_tg_id: int,
     appointment_id: int,
+    service_name: str,
+    date_str: str,
+    start_time: str,
+    master_name: str,
+    master_username: str | None = None,
 ) -> None:
+    text = (
+        "Ваша запись завершена. Понравилась ли вам услуга?\n\n"
+        f"Услуга: <b>{_safe(service_name)}</b>\n"
+        f"Дата: <b>{_safe(date_str)}</b>\n"
+        f"Время: <b>{_safe(start_time)}</b>\n"
+        f"{_user_line('Мастер', master_name, master_username)}"
+    )
+
     await _bot.send_message(
         chat_id=client_tg_id,
-        text="Ваша запись завершена. Понравилась ли вам услуга?",
+        text=text,
         reply_markup=build_review_rating_keyboard(appointment_id),
     )
 

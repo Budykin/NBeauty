@@ -24,7 +24,11 @@ async def auto_complete_due_appointments(session: AsyncSession) -> int:
 
     result = await session.execute(
         select(Appointment)
-        .options(selectinload(Appointment.review))
+        .options(
+            selectinload(Appointment.review),
+            selectinload(Appointment.service),
+            selectinload(Appointment.master),
+        )
         .where(
             Appointment.status.in_(AUTO_COMPLETABLE_STATUSES),
             Appointment.end_time <= func.now(),
@@ -44,6 +48,11 @@ async def auto_complete_due_appointments(session: AsyncSession) -> int:
                     notify_review_request(
                         client_tg_id=appointment.client_id,
                         appointment_id=appointment.id,
+                        service_name=appointment.service.name if appointment.service else "Услуга",
+                        date_str=appointment.start_time.strftime("%d.%m.%Y"),
+                        start_time=appointment.start_time.strftime("%H:%M"),
+                        master_name=appointment.master.full_name if appointment.master else "Мастер",
+                        master_username=appointment.master.username if appointment.master else None,
                     )
                 )
 

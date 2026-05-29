@@ -262,9 +262,9 @@ export function DiscoveryScreen({ masters, onSelectMaster, profileMasterId }: Di
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">Отзывы</p>
               {profileMaster.reviews.length > 0 ? (
-                <div className="flex gap-2 overflow-x-auto pb-1">
+                <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {profileMaster.reviews.map((review) => (
-                    <div key={review.id} className="min-w-[240px] rounded-xl border border-border bg-card p-3">
+                    <div key={review.id} className="rounded-xl border border-border bg-card p-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-sm font-medium text-card-foreground">
                           {review.clientName || "Клиент"}
