@@ -1,6 +1,6 @@
 "use client"
 
-import { useDeferredValue, useState } from "react"
+import { useDeferredValue, useEffect, useState } from "react"
 import type { MouseEvent } from "react"
 import { motion } from "framer-motion"
 import { ChevronRight, Share2, Star } from "lucide-react"
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { apiAuth } from "@/lib/api"
 import type { Master } from "@/lib/types"
 
 type TelegramWebAppWithShare = {
@@ -22,9 +23,10 @@ type TelegramWebAppWithShare = {
 interface DiscoveryScreenProps {
   masters: Master[]
   onSelectMaster: (master: Master) => void
+  profileMasterId?: string | null
 }
 
-export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProps) {
+export function DiscoveryScreen({ masters, onSelectMaster, profileMasterId }: DiscoveryScreenProps) {
   const [query, setQuery] = useState("")
   const [profileMaster, setProfileMaster] = useState<Master | null>(null)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
@@ -44,6 +46,16 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
     return searchIndex.includes(deferredQuery)
   })
 
+  useEffect(() => {
+    if (!profileMasterId) return
+
+    const deepLinkedMaster = masters.find((master) => master.id === profileMasterId)
+    if (!deepLinkedMaster) return
+
+    setShareFeedback(null)
+    setProfileMaster(deepLinkedMaster)
+  }, [masters, profileMasterId])
+
   function isAvatarImage(value: string): boolean {
     return value.startsWith("data:image/") || value.startsWith("http://") || value.startsWith("https://")
   }
@@ -60,16 +72,29 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
   }
 
   async function shareMaster(master: Master) {
-    const lines = [
-      `Мастер: ${master.name}`,
-      master.username ? `@${master.username}` : null,
-      `Рейтинг: ${master.rating} / 5`,
-      "NBeauty",
-    ].filter(Boolean) as string[]
-    const text = lines.join("\n")
-    const shareUrl = `https://t.me/share/url?text=${encodeURIComponent(text)}`
+    let masterLink: string | null = null
 
     try {
+      const botLink = await apiAuth.getTelegramBotLink()
+      const botUsername = botLink.botUrl
+        .replace(/^https?:\/\/t\.me\//, "")
+        .replace(/^@/, "")
+        .replace(/\/+$/, "")
+
+      if (!botUsername) {
+        throw new Error("Missing bot username")
+      }
+
+      masterLink = `https://t.me/${botUsername}/app?startapp=master_${master.id}`
+      const lines = [
+        `Мастер: ${master.name}`,
+        master.username ? `@${master.username}` : null,
+        `Рейтинг: ${master.rating} / 5`,
+        masterLink,
+      ].filter(Boolean) as string[]
+      const text = lines.join("\n")
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(masterLink)}&text=${encodeURIComponent(text)}`
+
       const telegramWebApp = (window as Window & { Telegram?: { WebApp?: TelegramWebAppWithShare } }).Telegram?.WebApp
       if (telegramWebApp?.openTelegramLink) {
         telegramWebApp.openTelegramLink(shareUrl)
@@ -92,10 +117,13 @@ export function DiscoveryScreen({ masters, onSelectMaster }: DiscoveryScreenProp
         return
       }
 
-      await navigator.clipboard.writeText(text)
-      setShareFeedback("Профиль скопирован")
+      await navigator.clipboard.writeText(masterLink)
+      setShareFeedback("Ссылка на мастера скопирована")
     } catch {
-      setShareFeedback("Не удалось поделиться")
+      setShareFeedback("Ссылка на мастера скопирована")
+      try {
+        await navigator.clipboard.writeText(masterLink ?? `${window.location.origin}/?startapp=master_${master.id}`)
+      } catch {}
     }
   }
 

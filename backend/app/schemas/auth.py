@@ -38,3 +38,9 @@ class LoginSessionStatusResponse(BaseModel):
     auth: AuthResponse | None = None
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class TelegramBotLinkResponse(BaseModel):
+    bot_url: str = Field(serialization_alias="botUrl")
+
+    model_config = ConfigDict(populate_by_name=True)

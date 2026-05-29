@@ -27,6 +27,7 @@ type TelegramWebApp = {
       first_name?: string
       last_name?: string
     }
+    start_param?: string
   }
   ready?: () => void
   expand?: () => void
@@ -79,6 +80,16 @@ export function getTelegramWebApp(): TelegramWebApp | undefined {
 
 export function getTelegramInitData(): string | null {
   return getTelegramWebApp()?.initData || getInitData()
+}
+
+export function getTelegramStartParam(): string | null {
+  const webAppStartParam = getTelegramWebApp()?.initDataUnsafe?.start_param
+  if (webAppStartParam) {
+    return webAppStartParam
+  }
+
+  const params = new URLSearchParams(window.location.search)
+  return params.get("tgWebAppStartParam") || params.get("startapp")
 }
 
 export function persistAuth(response: ApiAuthResponse, initData?: string): void {

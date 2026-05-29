@@ -11,6 +11,7 @@ from backend.app.schemas.auth import (
     AuthResponse,
     LoginSessionResponse,
     LoginSessionStatusResponse,
+    TelegramBotLinkResponse,
     TelegramInitData,
 )
 from common import get_async_session, settings
@@ -37,6 +38,11 @@ def _build_auth_response(user: User) -> AuthResponse:
 def _build_telegram_login_link(token: str) -> str:
     base = settings.telegram_bot_url.rstrip("/")
     return f"{base}?start=login_{quote(token)}"
+
+
+@router.get("/telegram/bot-link", response_model=TelegramBotLinkResponse)
+async def get_telegram_bot_link() -> TelegramBotLinkResponse:
+    return TelegramBotLinkResponse(bot_url=settings.telegram_bot_url.rstrip("/"))
 
 
 @router.post("/telegram", response_model=AuthResponse)

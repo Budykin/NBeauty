@@ -263,6 +263,10 @@ export interface ApiLoginSessionStatusResponse {
   auth?: ApiAuthResponse | null
 }
 
+export interface ApiTelegramBotLinkResponse {
+  botUrl: string
+}
+
 // ============================================================================
 // Auth
 // ============================================================================
@@ -287,6 +291,13 @@ export const apiAuth = {
 
   getLoginSession(token: string) {
     return request<ApiLoginSessionStatusResponse>(`/auth/telegram/login-session/${token}`, {
+      withAuth: false,
+      retryAuthOn401: false,
+    })
+  },
+
+  getTelegramBotLink() {
+    return request<ApiTelegramBotLinkResponse>("/auth/telegram/bot-link", {
       withAuth: false,
       retryAuthOn401: false,
     })

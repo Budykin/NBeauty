@@ -27,7 +27,7 @@ import {
   apiSchedules,
   apiServices,
 } from "@/lib/api"
-import { IS_DEV_AUTH_BYPASS, isAuthenticated } from "@/lib/auth"
+import { getTelegramStartParam, IS_DEV_AUTH_BYPASS, isAuthenticated } from "@/lib/auth"
 import {
   createDefaultWorkingHours,
   mapAppointment,
@@ -119,6 +119,8 @@ export default function TelegramCRMClient() {
   const [appLoading, setAppLoading] = useState(false)
   const [dataError, setDataError] = useState<string | null>(null)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
+  const [deepLinkedMasterId, setDeepLinkedMasterId] = useState<string | null>(null)
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false)
 
   const currentSalon = salons.find((salon) =>
     salon.members.some((member) => member.masterId === currentUserId),
@@ -288,6 +290,16 @@ export default function TelegramCRMClient() {
   }, [authState])
 
   useEffect(() => {
+    if (authState.status !== "ready") return
+
+    const startParam = getTelegramStartParam()
+    if (!startParam?.startsWith("master_")) return
+
+    setDeepLinkedMasterId(startParam.slice("master_".length))
+    setDeepLinkHandled(false)
+  }, [authState.status])
+
+  useEffect(() => {
     if (authState.status !== "ready" || !isAuthenticated()) return
     void loadAppData()
   }, [authState.status, loadAppData])
@@ -296,6 +308,27 @@ export default function TelegramCRMClient() {
     setResources(collectResources(salons))
     setSelectedSalon((current) => (current ? salons.find((salon) => salon.id === current.id) ?? null : null))
   }, [salons])
+
+  useEffect(() => {
+    if (appLoading || !deepLinkedMasterId || deepLinkHandled) return
+
+    setViewMode("client")
+    setScreen("discovery")
+    setSelectedMaster(null)
+    setSelectedSalon(null)
+
+    const deepLinkedMaster = masters.find((master) => master.id === deepLinkedMasterId)
+    if (!deepLinkedMaster) {
+      if (masters.length > 0) {
+        setDataError("Мастер по ссылке не найден.")
+        setDeepLinkHandled(true)
+      }
+      return
+    }
+
+    setDataError(null)
+    setDeepLinkHandled(true)
+  }, [appLoading, deepLinkHandled, deepLinkedMasterId, masters])
 
   const handleNavigate = useCallback((nextScreen: Screen) => {
     setScreen(nextScreen)
@@ -645,7 +678,11 @@ export default function TelegramCRMClient() {
 
             {viewMode === "client" && screen === "discovery" ? (
               <motion.div key="client-disc" {...pageVariants} transition={{ duration: 0.2 }}>
-                <DiscoveryScreen masters={masters} onSelectMaster={handleSelectMaster} />
+                <DiscoveryScreen
+                  masters={masters}
+                  onSelectMaster={handleSelectMaster}
+                  profileMasterId={deepLinkedMasterId}
+                />
               </motion.div>
             ) : null}
 
