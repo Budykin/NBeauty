@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ChevronLeft, Check, Loader2, Star, CalendarDays, Clock as ClockIcon } from "lucide-react"
 
@@ -117,6 +117,7 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
   const [availableSlots5, setAvailableSlots5] = useState<TimeSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotError, setSlotError] = useState<string | null>(null)
+  const refineContainerRef = useRef<HTMLDivElement | null>(null)
 
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(today.getMonth())
@@ -138,28 +139,6 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
       .filter((slot) => Math.abs(toMinutes(slot.start) - baseMinutes) <= 30)
       .sort((left, right) => toMinutes(left.start) - toMinutes(right.start))
   }, [availableSlots5, selectedBaseStart])
-
-  const centeredRefinedSlots = useMemo(() => {
-    if (refinedSlots.length === 0) return []
-
-    const fallbackIndex = selectedBaseStart
-      ? refinedSlots.findIndex((slot) => slot.start === selectedBaseStart)
-      : -1
-    const selectedIndex = selectedSlot
-      ? refinedSlots.findIndex((slot) => slot.start === selectedSlot.start && slot.end === selectedSlot.end)
-      : -1
-    const anchorIndex = selectedIndex >= 0 ? selectedIndex : fallbackIndex >= 0 ? fallbackIndex : 0
-
-    const windowSize = 5
-    const half = Math.floor(windowSize / 2)
-    let start = Math.max(anchorIndex - half, 0)
-    const end = Math.min(start + windowSize, refinedSlots.length)
-    if (end - start < windowSize) {
-      start = Math.max(end - windowSize, 0)
-    }
-
-    return refinedSlots.slice(start, end)
-  }, [refinedSlots, selectedBaseStart, selectedSlot])
 
   useEffect(() => {
     if (!selectedService || !selectedDateString || !selectedDateIsWorking) {
@@ -268,6 +247,15 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
       return pickNearestSlot(selectedBaseStart, refinedSlots)
     })
   }, [refinedSlots, selectedBaseStart])
+
+  useEffect(() => {
+    if (!selectedSlot?.start || !refineContainerRef.current) return
+
+    const element = refineContainerRef.current.querySelector<HTMLButtonElement>(
+      `[data-slot="${selectedSlot.start}"]`,
+    )
+    element?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })
+  }, [selectedSlot?.start, refinedSlots.length])
 
   function isDateDisabled(day: number) {
     const date = new Date(viewYear, viewMonth, day)
@@ -519,17 +507,21 @@ export function BookingWizard({ master, onBack, onBook }: BookingWizardProps) {
                   ))}
                 </div>
 
-                {selectedBaseStart && centeredRefinedSlots.length > 0 ? (
+                {selectedBaseStart && refinedSlots.length > 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col gap-3"
                   >
                     <p className="text-xs font-medium text-muted-foreground">Уточните время</p>
-                    <div className="flex justify-center gap-2">
-                      {centeredRefinedSlots.map((slot) => (
+                    <div
+                      ref={refineContainerRef}
+                      className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                      {refinedSlots.map((slot) => (
                         <button
                           key={`${slot.start}-${slot.end}`}
+                          data-slot={slot.start}
                           onClick={() => setSelectedSlot(slot)}
                           className={cn(
                             "min-w-24 rounded-lg border px-4 py-3 text-sm font-medium transition-all",
