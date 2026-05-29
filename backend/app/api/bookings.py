@@ -121,7 +121,6 @@ async def create_booking(
             notify_appointment_created(
                 master_tg_id=master.tg_id,
                 client_name=current_user.full_name,
-                client_tg_id=current_user.tg_id,
                 client_username=current_user.username,
                 service_name=service.name,
                 date_str=date_str,

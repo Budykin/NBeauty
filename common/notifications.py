@@ -51,10 +51,10 @@ def _username_link(username: str | None) -> str | None:
     return f'<a href="https://t.me/{escaped_username}">@{escaped_username}</a>'
 
 
-def _user_line(label: str, name: str, tg_id: int, username: str | None = None) -> str:
+def _user_line(label: str, name: str, username: str | None = None) -> str:
     link = _username_link(username)
     suffix = f" ({link})" if link else ""
-    return f"{label}: <b>{_safe(name)}</b>{suffix}\nID {label.lower()}: <code>{tg_id}</code>"
+    return f"{label}: <b>{_safe(name)}</b>{suffix}"
 
 
 def _salon_line(salon_name: str | None) -> str:
@@ -65,7 +65,6 @@ async def notify_appointment_created(
     *,
     master_tg_id: int,
     client_name: str,
-    client_tg_id: int,
     client_username: str | None = None,
     service_name: str,
     date_str: str,
@@ -76,7 +75,7 @@ async def notify_appointment_created(
 
     text = (
         "🆕 <b>Новая запись</b>\n\n"
-        f"{_user_line('Клиент', client_name, client_tg_id, client_username)}\n"
+        f"{_user_line('Клиент', client_name, client_username)}\n"
         f"Услуга: <b>{_safe(service_name)}</b>\n"
         f"Дата: <b>{_safe(date_str)}</b>\n"
         f"Время: <b>{_safe(start_time)}</b>"
@@ -90,7 +89,6 @@ async def notify_appointment_confirmed(
     *,
     client_tg_id: int,
     master_name: str,
-    master_tg_id: int,
     master_username: str | None = None,
     service_name: str,
     date_str: str,
@@ -100,7 +98,7 @@ async def notify_appointment_confirmed(
 
     text = (
         "✅ <b>Запись подтверждена</b>\n\n"
-        f"{_user_line('Мастер', master_name, master_tg_id, master_username)}\n"
+        f"{_user_line('Мастер', master_name, master_username)}\n"
         f"Услуга: <b>{_safe(service_name)}</b>\n"
         f"Дата: <b>{_safe(date_str)}</b>\n"
         f"Время: <b>{_safe(start_time)}</b>"
@@ -113,7 +111,6 @@ async def notify_appointment_cancelled_for_master(
     *,
     master_tg_id: int,
     client_name: str,
-    client_tg_id: int,
     client_username: str | None = None,
     service_name: str,
     date_str: str,
@@ -124,7 +121,7 @@ async def notify_appointment_cancelled_for_master(
 
     text = (
         "❌ <b>Запись отменена</b>\n\n"
-        f"{_user_line('Клиент', client_name, client_tg_id, client_username)}\n"
+        f"{_user_line('Клиент', client_name, client_username)}\n"
         f"Услуга: <b>{_safe(service_name)}</b>\n"
         f"Дата: <b>{_safe(date_str)}</b>\n"
         f"Время: <b>{_safe(start_time)}</b>"
@@ -138,7 +135,6 @@ async def notify_appointment_cancelled_for_client(
     *,
     client_tg_id: int,
     master_name: str,
-    master_tg_id: int,
     master_username: str | None = None,
     service_name: str,
     date_str: str,
@@ -152,7 +148,7 @@ async def notify_appointment_cancelled_for_client(
         f"Услуга: <b>{_safe(service_name)}</b>\n"
         f"Дата: <b>{_safe(date_str)}</b>\n"
         f"Время: <b>{_safe(start_time)}</b>\n"
-        f"{_user_line('Мастер', master_name, master_tg_id, master_username)}"
+        f"{_user_line('Мастер', master_name, master_username)}"
         f"{_salon_line(salon_name)}"
     )
 

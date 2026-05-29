@@ -88,7 +88,6 @@ async def on_confirm_appointment(callback: CallbackQuery):
             await notify_appointment_confirmed(
                 client_tg_id=client.tg_id,
                 master_name=master.full_name,
-                master_tg_id=master.tg_id,
                 master_username=master.username,
                 service_name=appointment.service.name if appointment.service else "Услуга",
                 date_str=date_str,
@@ -155,7 +154,6 @@ async def on_cancel_appointment(callback: CallbackQuery):
             await notify_appointment_cancelled_for_client(
                 client_tg_id=appointment.client.tg_id,
                 master_name=appointment.master.full_name,
-                master_tg_id=appointment.master.tg_id,
                 master_username=appointment.master.username,
                 service_name=appointment.service.name if appointment.service else "Услуга",
                 date_str=appointment.start_time.strftime("%d.%m.%Y"),

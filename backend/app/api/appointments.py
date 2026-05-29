@@ -208,7 +208,6 @@ async def cancel_appointment(
             notify_appointment_cancelled_for_client(
                 client_tg_id=client.tg_id,
                 master_name=master.full_name,
-                master_tg_id=master.tg_id,
                 master_username=master.username,
                 service_name=service_name,
                 date_str=date_str,
@@ -223,7 +222,6 @@ async def cancel_appointment(
                 notify_appointment_cancelled_for_master(
                     master_tg_id=master.tg_id,
                     client_name=client.full_name,
-                    client_tg_id=client.tg_id,
                     client_username=client.username,
                     service_name=service_name,
                     date_str=date_str,

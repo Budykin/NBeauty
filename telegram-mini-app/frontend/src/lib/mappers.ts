@@ -114,11 +114,13 @@ export function mapAppointment(
 export function mapMaster(master: ApiMaster): Master {
   return {
     id: master.id,
-    name: master.name,
+    name: master.fullName ?? master.name,
+    username: master.username,
     avatar: master.avatar || master.name.slice(0, 2).toUpperCase(),
     specialty: master.specialty || "Мастер",
     rating: master.rating,
     reviewCount: master.reviewCount,
+    reviews: master.reviews ?? [],
     services: master.services.map((service) => ({
       id: service.id,
       name: service.name,
