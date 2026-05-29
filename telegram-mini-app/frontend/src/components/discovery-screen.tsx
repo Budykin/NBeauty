@@ -90,10 +90,11 @@ export function DiscoveryScreen({ masters, onSelectMaster, profileMasterId }: Di
         `Мастер: ${master.name}`,
         master.username ? `@${master.username}` : null,
         `Рейтинг: ${master.rating} / 5`,
-        masterLink,
+        `Открыть карточку мастера: ${masterLink}`,
+        `Если не зарегистрированы в NBeauty — сначала запустите бот: ${botLink.botUrl}`,
       ].filter(Boolean) as string[]
       const text = lines.join("\n")
-      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(masterLink)}&text=${encodeURIComponent(text)}`
+      const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(botLink.botUrl)}&text=${encodeURIComponent(text)}`
 
       const telegramWebApp = (window as Window & { Telegram?: { WebApp?: TelegramWebAppWithShare } }).Telegram?.WebApp
       if (telegramWebApp?.openTelegramLink) {
@@ -271,16 +272,6 @@ export function DiscoveryScreen({ masters, onSelectMaster, profileMasterId }: Di
                         </p>
                         <span className="shrink-0 text-xs text-muted-foreground">⭐ {review.rating}/5</span>
                       </div>
-                      {review.clientUsername ? (
-                        <a
-                          href={`https://t.me/${review.clientUsername}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-0.5 block truncate text-xs font-medium text-primary"
-                        >
-                          @{review.clientUsername}
-                        </a>
-                      ) : null}
                       {review.comment ? (
                         <p className="mt-2 line-clamp-4 text-sm text-muted-foreground">{review.comment}</p>
                       ) : null}

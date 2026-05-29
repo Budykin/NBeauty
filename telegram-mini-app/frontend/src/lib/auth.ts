@@ -88,8 +88,38 @@ export function getTelegramStartParam(): string | null {
     return webAppStartParam
   }
 
-  const params = new URLSearchParams(window.location.search)
-  return params.get("tgWebAppStartParam") || params.get("startapp")
+  const fromParams = (params: URLSearchParams): string | null =>
+    params.get("tgWebAppStartParam") || params.get("startapp")
+
+  const searchParams = new URLSearchParams(window.location.search)
+  const searchValue = fromParams(searchParams)
+  if (searchValue) {
+    return searchValue
+  }
+
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash
+  if (!hash) {
+    return null
+  }
+
+  const hashParams = new URLSearchParams(hash)
+  const hashValue = fromParams(hashParams)
+  if (hashValue) {
+    return hashValue
+  }
+
+  const queryIndex = hash.indexOf("?")
+  if (queryIndex >= 0) {
+    const nestedQueryParams = new URLSearchParams(hash.slice(queryIndex + 1))
+    const nestedValue = fromParams(nestedQueryParams)
+    if (nestedValue) {
+      return nestedValue
+    }
+  }
+
+  return null
 }
 
 export function persistAuth(response: ApiAuthResponse, initData?: string): void {
