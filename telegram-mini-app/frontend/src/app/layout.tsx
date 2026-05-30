@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: 'Система записи клиентов для мастеров и клиентов',
   generator: 'v0.app',
   icons: {
-    icon: '/apple-icon.png',
+    icon: '/icon.svg',
   },
 }
 
