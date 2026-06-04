@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { CalendarDays, Check, Clock3, Loader2, Plus, UserRound } from "lucide-react"
+import { CalendarDays, Check, Clock3, Loader2, Plus, UserRound, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError, apiAppointments, apiClients, apiMasters } from "@/lib/api"
@@ -466,15 +459,28 @@ export function AddBookingDrawer({
     }
   }
 
-  return (
-    <Drawer open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DrawerContent className="inset-0 h-svh max-h-none w-full max-w-none rounded-none border-0">
-        <DrawerHeader>
-          <DrawerTitle>Новая запись</DrawerTitle>
-          <DrawerDescription>Выбери клиента, услугу, дату и свободное время.</DrawerDescription>
-        </DrawerHeader>
+  if (!open) {
+    return null
+  }
 
-        <div className="flex-1 overflow-y-auto px-4 pb-6">
+  return (
+    <div className="fixed inset-0 z-50 flex h-svh flex-col bg-background">
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 pb-4 pt-5">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Новая запись</h2>
+          <p className="text-sm text-muted-foreground">Выбери клиента, услугу, дату и свободное время.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary"
+          aria-label="Закрыть форму создания записи"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pb-6 pt-4">
           <div className="flex flex-col gap-4">
             {submitError ? (
               <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -774,8 +780,7 @@ export function AddBookingDrawer({
               )}
             </Button>
           </div>
-        </div>
-      </DrawerContent>
-    </Drawer>
+      </div>
+    </div>
   )
 }
