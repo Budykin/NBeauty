@@ -30,10 +30,6 @@ export function usePeriodicRefresh(
       return
     }
 
-    // Первый вызов сразу
-    void callbackRef.current()
-
-    // Затем периодический вызов
     intervalRef.current = window.setInterval(() => {
       void callbackRef.current()
     }, interval)
