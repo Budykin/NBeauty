@@ -317,7 +317,7 @@ export function ProfileScreen({
         transition={{ delay: 0.3 }}
         className="text-center text-xs text-muted-foreground"
       >
-        CRM Мастер v1.0 - Telegram Mini App
+        NBeauty v1.0 - Telegram Mini App
       </motion.p>
     </div>
   )

@@ -1,9 +1,8 @@
 "use client"
 
-import { useDeferredValue, useEffect, useState } from "react"
-import type { ReactNode } from "react"
+import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { ChevronRight, Phone, Plus, StickyNote, UserRound } from "lucide-react"
+import { ChevronRight, Plus, StickyNote } from "lucide-react"
 
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import { Button } from "@/components/ui/button"
@@ -25,6 +24,8 @@ const statusLabel = {
   guest: "Незарегистрированный",
 } as const
 
+type NoteSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error"
+
 export function MyClientsScreen() {
   const [clients, setClients] = useState<ClientRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,15 +38,37 @@ export function MyClientsScreen() {
   const [draftNote, setDraftNote] = useState("")
   const [savePending, setSavePending] = useState(false)
   const [noteDraft, setNoteDraft] = useState("")
+  const [noteSaveStatus, setNoteSaveStatus] = useState<NoteSaveStatus>("idle")
+  const lastSavedNoteRef = useRef("")
   const deferredQuery = useDeferredValue(query)
+  const selectedClientKey = selectedClient ? `${selectedClient.type}-${selectedClient.id}` : null
 
   useEffect(() => {
     void loadClients()
   }, [deferredQuery])
 
   useEffect(() => {
-    setNoteDraft(selectedClient?.note ?? "")
-  }, [selectedClient])
+    const note = selectedClient?.note ?? ""
+    lastSavedNoteRef.current = note
+    setNoteDraft(note)
+    setNoteSaveStatus("idle")
+  }, [selectedClientKey])
+
+  useEffect(() => {
+    if (!selectedClient) return
+
+    if (noteDraft === lastSavedNoteRef.current) {
+      setNoteSaveStatus("idle")
+      return
+    }
+
+    setNoteSaveStatus("dirty")
+    const timeoutId = window.setTimeout(() => {
+      void saveNoteNow(noteDraft)
+    }, 700)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [noteDraft, selectedClientKey])
 
   async function loadClients() {
     try {
@@ -97,23 +120,37 @@ export function MyClientsScreen() {
     }
   }
 
-  async function handleSaveNote() {
+  async function saveNoteNow(nextNote: string) {
     if (!selectedClient) return
+    if (nextNote === lastSavedNoteRef.current) return
 
     try {
-      setSavePending(true)
-      const updated = await apiClients.updateNote(selectedClient.type, selectedClient.id, noteDraft)
+      setNoteSaveStatus("saving")
+      const updated = await apiClients.updateNote(selectedClient.type, selectedClient.id, nextNote)
       const mapped = mapClient(updated)
-      setSelectedClient(mapped)
+      lastSavedNoteRef.current = mapped.note
+      setSelectedClient((current) =>
+        current?.type === mapped.type && current.id === mapped.id ? mapped : current,
+      )
       setClients((previous) =>
         previous.map((client) => (client.id === mapped.id && client.type === mapped.type ? { ...client, note: mapped.note } : client)),
       )
+      setNoteSaveStatus("saved")
+      window.setTimeout(() => {
+        setNoteSaveStatus((current) => (current === "saved" ? "idle" : current))
+      }, 1500)
     } catch (err) {
       console.error("Update client note failed:", err)
       setError(err instanceof ApiError ? err.message : "Не удалось обновить заметку.")
-    } finally {
-      setSavePending(false)
+      setNoteSaveStatus("error")
     }
+  }
+
+  function closeClientDetails() {
+    if (selectedClient && noteDraft !== lastSavedNoteRef.current) {
+      void saveNoteNow(noteDraft)
+    }
+    setSelectedClient(null)
   }
 
   return (
@@ -160,34 +197,38 @@ export function MyClientsScreen() {
       {!loading ? (
         <div className="flex flex-col gap-2.5">
           {clients.map((client, index) => (
-            <motion.button
+            <motion.div
               key={`${client.type}-${client.id}`}
+              role="button"
+              tabIndex={0}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.04 }}
               onClick={() => void openDetails(client)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  void openDetails(client)
+                }
+              }}
               className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-all active:scale-[0.98]"
             >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <UserRound className="h-5 w-5" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                {getInitials(client.fullName)}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-semibold text-card-foreground">{client.fullName}</p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${client.type === "registered" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                    {client.type === "registered" ? "зарегистрированный" : "незарегистрированный"}
-                  </span>
-                </div>
+                <p className="truncate text-sm font-semibold text-card-foreground">{client.fullName}</p>
                 {client.telephoneNumber ? (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{client.telephoneNumber}</p>
+                  <p className="mt-0.5 truncate text-xs font-medium text-primary">{client.telephoneNumber}</p>
                 ) : null}
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  <span>{client.appointmentsCount} записей</span>
-                  <span>{client.lastAppointmentAt ? `Последний визит: ${formatDate(client.lastAppointmentAt)}` : "Без визитов"}</span>
-                </div>
+                <p className="text-xs text-muted-foreground">{statusLabel[client.type]}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {client.appointmentsCount} записей
+                  {client.lastAppointmentAt ? ` · последний визит: ${formatDate(client.lastAppointmentAt)}` : " · без визитов"}
+                </p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </motion.button>
+            </motion.div>
           ))}
 
           {clients.length === 0 ? (
@@ -199,14 +240,14 @@ export function MyClientsScreen() {
       ) : null}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="p-4">
-          <DialogHeader>
-            <DialogTitle>Новый незарегистрированный клиент</DialogTitle>
+        <DialogContent className="max-h-[90svh] overflow-y-auto p-4">
+          <DialogHeader className="text-center">
+            <DialogTitle className="text-xl">Новый незарегистрированный клиент</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Имя" />
-            <Input value={draftPhone} onChange={(event) => setDraftPhone(event.target.value)} placeholder="Телефон" />
-            <Textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="Заметка мастера (необязательно)" rows={4} />
+            <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Имя" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
+            <Input value={draftPhone} onChange={(event) => setDraftPhone(event.target.value)} placeholder="Телефон" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
+            <Textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="Заметка мастера (необязательно)" rows={4} className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
           </div>
           <DialogFooter className="sm:justify-end">
             <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={savePending}>Отмена</Button>
@@ -217,47 +258,48 @@ export function MyClientsScreen() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={selectedClient !== null} onOpenChange={(open) => !open && setSelectedClient(null)}>
+      <Dialog open={selectedClient !== null} onOpenChange={(open) => !open && closeClientDetails()}>
         {selectedClient ? (
           <DialogContent className="max-h-[90svh] overflow-y-auto p-4">
-            <DialogHeader>
-              <DialogTitle>{selectedClient.fullName}</DialogTitle>
+            <DialogHeader className="items-center text-center">
+              <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-primary text-2xl font-semibold text-primary-foreground">
+                {getInitials(selectedClient.fullName)}
+              </div>
+              <DialogTitle className="text-xl">{selectedClient.fullName}</DialogTitle>
+              {selectedClient.username ? (
+                <a
+                  href={`https://t.me/${selectedClient.username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-primary"
+                >
+                  @{selectedClient.username}
+                </a>
+              ) : null}
+              {selectedClient.telephoneNumber ? (
+                <p className="text-sm text-muted-foreground">{selectedClient.telephoneNumber}</p>
+              ) : null}
+              <p className="text-sm text-muted-foreground">{statusLabel[selectedClient.type]}</p>
+              <p className="text-sm text-muted-foreground">
+                {selectedClient.lastAppointmentAt ? `Последний визит: ${formatDateTime(selectedClient.lastAppointmentAt)}` : "Нет визитов"}
+              </p>
             </DialogHeader>
 
             <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-card p-3">
-                <div className="space-y-2 text-sm">
-                  <InfoRow icon={<UserRound className="h-4 w-4" />} label="Статус" value={statusLabel[selectedClient.type]} />
-                  {selectedClient.telephoneNumber ? (
-                    <InfoRow icon={<Phone className="h-4 w-4" />} label="Телефон" value={selectedClient.telephoneNumber} />
-                  ) : null}
-                  {selectedClient.username ? (
-                    <div className="flex items-start gap-2">
-                      <div className="mt-0.5 text-primary">@</div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Username</p>
-                        <a
-                          href={`https://t.me/${selectedClient.username}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-medium text-primary"
-                        >
-                          @{selectedClient.username}
-                        </a>
-                      </div>
-                    </div>
-                  ) : null}
-                  <InfoRow label="Последний визит" value={selectedClient.lastAppointmentAt ? formatDateTime(selectedClient.lastAppointmentAt) : "Нет визитов"} />
-                </div>
-              </div>
-
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <StickyNote className="h-4 w-4 text-primary" />
-                  Заметка мастера
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <StickyNote className="h-4 w-4 text-primary" />
+                    Заметка мастера
+                  </div>
+                  <p className="text-xs text-muted-foreground">{noteStatusText(noteSaveStatus)}</p>
                 </div>
-                <Textarea value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} rows={5} />
-                <Button onClick={() => void handleSaveNote()} disabled={savePending}>Сохранить заметку</Button>
+                <Textarea
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                  rows={5}
+                  className="rounded-xl border-border bg-background text-sm focus-visible:border-primary focus-visible:ring-primary/20"
+                />
               </div>
 
               <div className="space-y-2">
@@ -290,18 +332,6 @@ export function MyClientsScreen() {
   )
 }
 
-function InfoRow({ icon, label, value }: { icon?: ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      {icon ? <div className="mt-0.5 text-primary">{icon}</div> : null}
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm text-foreground">{value}</p>
-      </div>
-    </div>
-  )
-}
-
 function formatDate(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
@@ -310,6 +340,25 @@ function formatDate(value: string) {
     month: "2-digit",
     year: "numeric",
   })
+}
+
+function getInitials(value: string) {
+  const initials = value
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("")
+
+  return initials || "КЛ"
+}
+
+function noteStatusText(status: NoteSaveStatus) {
+  if (status === "dirty") return "Есть изменения"
+  if (status === "saving") return "Сохраняем..."
+  if (status === "saved") return "Сохранено"
+  if (status === "error") return "Не сохранено"
+  return ""
 }
 
 function formatTime(value: string) {
