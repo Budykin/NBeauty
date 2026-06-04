@@ -519,7 +519,8 @@ export const apiAppointments = {
 
   create(data: {
     masterId: number
-    clientId: number
+    clientId?: number
+    guestClientId?: number
     serviceId: number
     startTime: string
   }) {
@@ -562,6 +563,12 @@ export const apiClients = {
     return request<ApiClient>("/clients/guest", {
       method: "POST",
       body: JSON.stringify(data),
+    })
+  },
+
+  deleteGuest(id: string) {
+    return request<void>(`/clients/guest/${id}`, {
+      method: "DELETE",
     })
   },
 

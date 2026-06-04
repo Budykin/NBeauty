@@ -417,7 +417,7 @@ class MasterSchedule(Base):
 class GuestClient(Base):
     __tablename__ = "guest_clients"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     master_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.tg_id", ondelete="CASCADE"),
@@ -425,7 +425,7 @@ class GuestClient(Base):
         index=True,
     )
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    telephone_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    telephone_number: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -448,7 +448,7 @@ class GuestClient(Base):
 class ClientNote(Base):
     __tablename__ = "client_notes"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     master_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey("users.tg_id", ondelete="CASCADE"),
@@ -462,7 +462,7 @@ class ClientNote(Base):
         index=True,
     )
     guest_client_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
+        BigInteger,
         ForeignKey("guest_clients.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
@@ -522,8 +522,8 @@ class Appointment(Base):
         index=True,
     )
     guest_client_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("guest_clients.id", ondelete="CASCADE"),
+        BigInteger,
+        ForeignKey("guest_clients.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )

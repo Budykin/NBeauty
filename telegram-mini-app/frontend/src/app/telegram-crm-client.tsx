@@ -8,6 +8,7 @@ import { BookingWizard } from "@/components/booking-wizard"
 import { DevLoginScreen } from "@/components/dev-login-screen"
 import { DiscoveryScreen } from "@/components/discovery-screen"
 import { EditProfile } from "@/components/edit-profile"
+import { AddBookingDrawer } from "@/components/add-booking-drawer"
 import { MasterDashboard } from "@/components/master-dashboard"
 import { MyClientsScreen } from "@/components/my-clients-screen"
 import { MyBookingsScreen } from "@/components/my-bookings"
@@ -129,6 +130,7 @@ export default function TelegramCRMClient() {
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const [selectedMaster, setSelectedMaster] = useState<Master | null>(null)
   const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null)
+  const [isAddBookingOpen, setIsAddBookingOpen] = useState(false)
   const [appLoading, setAppLoading] = useState(false)
   const [dataError, setDataError] = useState<string | null>(null)
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
@@ -576,6 +578,16 @@ export default function TelegramCRMClient() {
     setScreen("salon-dashboard")
   }, [])
 
+  const handleMasterAppointmentCreated = useCallback((appointment: Appointment) => {
+    setAppointments((previous) => dedupeAppointments([...previous, appointment]))
+    setSelectedDate(new Date(`${appointment.date}T00:00:00`))
+    setIsAddBookingOpen(false)
+    void loadAppData("master", {
+      silent: true,
+      includeCommon: false,
+    })
+  }, [loadAppData])
+
   const handleUpdateSalon = useCallback((updatedSalon: Salon) => {
     syncSalonInState(updatedSalon)
   }, [syncSalonInState])
@@ -719,17 +731,29 @@ export default function TelegramCRMClient() {
           <AnimatePresence mode="wait">
             {viewMode === "master" && screen === "dashboard" ? (
               <motion.div key="master-dash" {...pageVariants} transition={{ duration: 0.2 }}>
-                <MasterDashboard
-                  appointments={masterAppointments}
-                  allAppointments={appointments}
-                  resources={resources}
-                  salon={currentSalon}
-                  currentMasterId={currentUserId}
-                  selectedDate={selectedDate}
-                  onSelectDate={setSelectedDate}
-                  onCancel={handleCancelAppointment}
-                  onConfirm={handleConfirmAppointment}
-                />
+                <>
+                  <MasterDashboard
+                    appointments={masterAppointments}
+                    allAppointments={appointments}
+                    resources={resources}
+                    salon={currentSalon}
+                    currentMasterId={currentUserId}
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                    onAddBooking={() => setIsAddBookingOpen(true)}
+                    showAddBooking
+                    onCancel={handleCancelAppointment}
+                    onConfirm={handleConfirmAppointment}
+                  />
+                  <AddBookingDrawer
+                    open={isAddBookingOpen}
+                    onClose={() => setIsAddBookingOpen(false)}
+                    masterId={currentUserId}
+                    services={services}
+                    selectedDate={selectedDate}
+                    onCreated={handleMasterAppointmentCreated}
+                  />
+                </>
               </motion.div>
             ) : null}
 

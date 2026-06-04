@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
-import { ChevronRight, Plus, StickyNote } from "lucide-react"
+import { Loader2, Plus, StickyNote, Trash2, X } from "lucide-react"
 
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import { Button } from "@/components/ui/button"
@@ -42,6 +42,8 @@ export function MyClientsScreen() {
   const [savePending, setSavePending] = useState(false)
   const [noteDraft, setNoteDraft] = useState("")
   const [noteSaveStatus, setNoteSaveStatus] = useState<NoteSaveStatus>("idle")
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [deletePendingId, setDeletePendingId] = useState<string | null>(null)
   const lastSavedNoteRef = useRef("")
   const deferredQuery = useDeferredValue(query)
   const selectedClientKey = selectedClient ? `${selectedClient.type}-${selectedClient.id}` : null
@@ -156,6 +158,26 @@ export function MyClientsScreen() {
     }
   }
 
+  async function handleDeleteGuest(client: ClientRecord) {
+    if (client.type !== "guest") return
+
+    try {
+      setDeletePendingId(client.id)
+      setError(null)
+      await apiClients.deleteGuest(client.id)
+      setClients((previous) => previous.filter((item) => !(item.type === "guest" && item.id === client.id)))
+      setConfirmDeleteId((current) => (current === client.id ? null : current))
+      setSelectedClient((current) =>
+        current?.type === "guest" && current.id === client.id ? null : current,
+      )
+    } catch (err) {
+      console.error("Delete guest client failed:", err)
+      setError(err instanceof ApiError ? err.message : "Не удалось удалить клиента.")
+    } finally {
+      setDeletePendingId(null)
+    }
+  }
+
   function closeClientDetails() {
     if (selectedClient && noteDraft !== lastSavedNoteRef.current) {
       void saveNoteNow(noteDraft)
@@ -237,7 +259,46 @@ export function MyClientsScreen() {
                   {client.lastAppointmentAt ? ` · последний визит: ${formatDate(client.lastAppointmentAt)}` : " · без визитов"}
                 </p>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              {client.type === "guest" ? (
+                confirmDeleteId === client.id ? (
+                  <div
+                    className="flex items-center gap-1.5"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => void handleDeleteGuest(client)}
+                      disabled={deletePendingId === client.id}
+                      className="flex h-8 items-center gap-1 rounded-lg bg-destructive px-2.5 text-xs font-medium text-white disabled:opacity-50"
+                    >
+                      {deletePendingId === client.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        "Удалить"
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary"
+                      aria-label="Отмена удаления"
+                    >
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setConfirmDeleteId(client.id)
+                    }}
+                    disabled={deletePendingId === client.id}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Удалить незарегистрированного клиента"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )
+              ) : null}
             </motion.div>
           ))}
 

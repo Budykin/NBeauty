@@ -321,6 +321,39 @@ async def create_guest_client(
     return await _build_client_detail(session, current_user.tg_id, "guest", guest_client.id)
 
 
+@router.delete("/guest/{guest_client_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_guest_client(
+    guest_client_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    _ensure_master(current_user)
+
+    guest_client = await session.scalar(
+        select(GuestClient).where(
+            GuestClient.id == guest_client_id,
+            GuestClient.master_id == current_user.tg_id,
+        )
+    )
+    if guest_client is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
+
+    appointments_count = await session.scalar(
+        select(func.count(Appointment.id)).where(
+            Appointment.master_id == current_user.tg_id,
+            Appointment.guest_client_id == guest_client_id,
+        )
+    )
+    if appointments_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Нельзя удалить клиента, у которого есть записи",
+        )
+
+    await session.delete(guest_client)
+    await session.commit()
+
+
 @router.put("/my/{client_type}/{client_id}/note", response_model=ClientDetailOut)
 async def update_client_note(
     client_type: ClientType,

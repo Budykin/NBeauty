@@ -120,10 +120,11 @@ export function MasterDashboard({
         {showAddBooking && onAddBooking ? (
           <button
             onClick={onAddBooking}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-transform active:scale-95"
+            className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95"
             aria-label="Добавить запись"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-3.5 w-3.5" />
+            Добавить
           </button>
         ) : null}
       </div>

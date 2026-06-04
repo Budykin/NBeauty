@@ -11,12 +11,49 @@ from backend.app.core.auth import get_current_user
 from backend.app.schemas.common import AppointmentOut
 from common.appointments import ACTIVE_APPOINTMENT_STATUSES, auto_complete_due_appointments
 from common.db import get_async_session
-from common.models import Appointment, MasterSchedule, Service, AppointmentStatus, User
+from common.models import Appointment, MasterSchedule, Service, AppointmentStatus, GuestClient, User, UserRole
 from common.notifications import notify_appointment_created
 from backend.app.schemas.bookings import BookingCreate
 from backend.app.services.default_schedules import ensure_default_master_schedules
 
 router = APIRouter()
+
+
+async def _resolve_booking_client(
+    *,
+    payload: BookingCreate,
+    current_user: User,
+    service: Service,
+    session: AsyncSession,
+) -> tuple[int | None, int | None, str, str | None, bool]:
+    is_self_booking = payload.guest_client_id is None and payload.client_id == current_user.tg_id
+
+    if is_self_booking:
+        return current_user.tg_id, None, current_user.full_name, current_user.username, True
+
+    if current_user.role != UserRole.MASTER:
+        raise HTTPException(status_code=403, detail="Нельзя создать запись от имени другого клиента")
+
+    if service.master_id != current_user.tg_id:
+        raise HTTPException(status_code=403, detail="Мастер может создавать запись только к себе")
+
+    if payload.guest_client_id is not None:
+        guest_client = await session.scalar(
+            select(GuestClient).where(
+                GuestClient.id == payload.guest_client_id,
+                GuestClient.master_id == current_user.tg_id,
+            )
+        )
+        if guest_client is None:
+            raise HTTPException(status_code=404, detail="Незарегистрированный клиент не найден")
+
+        return None, guest_client.id, guest_client.full_name, None, False
+
+    client = await session.scalar(select(User).where(User.tg_id == payload.client_id))
+    if client is None:
+        raise HTTPException(status_code=404, detail="Зарегистрированный клиент не найден")
+
+    return client.tg_id, None, client.full_name, client.username, False
 
 
 @router.post("/create", response_model=AppointmentOut, status_code=status.HTTP_201_CREATED)
@@ -43,8 +80,12 @@ async def create_booking(
     if payload.master_id != service.master_id:
         raise HTTPException(status_code=400, detail="Услуга не принадлежит выбранному мастеру")
 
-    if payload.client_id != current_user.tg_id:
-        raise HTTPException(status_code=403, detail="Нельзя создать запись от имени другого клиента")
+    client_id, guest_client_id, client_name, client_username, should_notify_master = await _resolve_booking_client(
+        payload=payload,
+        current_user=current_user,
+        service=service,
+        session=session,
+    )
 
     # 2. Вычисляем время окончания на основе длительности услуги
     end_time = start_time + timedelta(minutes=service.duration)
@@ -92,7 +133,8 @@ async def create_booking(
     # 4. Если конфликтов нет, создаем запись
     new_appointment = Appointment(
         master_id=service.master_id,
-        client_id=current_user.tg_id,
+        client_id=client_id,
+        guest_client_id=guest_client_id,
         salon_id=service.salon_id,
         service_id=payload.service_id,
         resource_id=service.resource_id,
@@ -105,20 +147,18 @@ async def create_booking(
     await session.commit()
     await session.refresh(new_appointment)
 
-    # 5. Отправляем уведомление мастеру (в фоне, не блокируя ответ)
-    master_result = await session.execute(
+    master = current_user if service.master_id == current_user.tg_id else await session.scalar(
         select(User).where(User.tg_id == service.master_id)
     )
-    master = master_result.scalar_one_or_none()
 
-    if master:
+    if should_notify_master and master:
         date_str = new_appointment.start_time.strftime("%d.%m.%Y")
         time_str = new_appointment.start_time.strftime("%H:%M")
         asyncio.create_task(
             notify_appointment_created(
                 master_tg_id=master.tg_id,
-                client_name=current_user.full_name,
-                client_username=current_user.username,
+                client_name=client_name,
+                client_username=client_username,
                 service_name=service.name,
                 date_str=date_str,
                 start_time=time_str,
@@ -131,8 +171,9 @@ async def create_booking(
         salon_id=str(new_appointment.salon_id) if new_appointment.salon_id else None,
         master_id=new_appointment.master_id,
         master_name=master.full_name if master else "Неизвестный",
-        client_id=current_user.tg_id,
-        client_name=current_user.full_name,
+        client_id=new_appointment.client_id,
+        guest_client_id=new_appointment.guest_client_id,
+        client_name=client_name,
         service_name=service.name,
         resource_id=new_appointment.resource_id,
         start_time=new_appointment.start_time,

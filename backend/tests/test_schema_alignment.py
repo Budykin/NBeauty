@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from sqlalchemy import BigInteger
+
 from backend.main import app
-from common.models import Appointment, AppointmentStatus, Review, Salon, User
+from common.models import Appointment, AppointmentStatus, ClientNote, GuestClient, Review, Salon, User
 
 
 def test_models_match_dump_removed_columns():
@@ -20,6 +22,16 @@ def test_appointment_status_values_match_postgres_check():
         "completed",
     }
     assert "status" in Appointment.__table__.columns
+
+
+def test_guest_client_related_models_match_database_shape():
+    assert isinstance(GuestClient.__table__.columns["id"].type, BigInteger)
+    assert GuestClient.__table__.columns["telephone_number"].nullable is False
+    assert isinstance(ClientNote.__table__.columns["guest_client_id"].type, BigInteger)
+    assert isinstance(Appointment.__table__.columns["guest_client_id"].type, BigInteger)
+
+    guest_client_fk = next(iter(Appointment.__table__.columns["guest_client_id"].foreign_keys))
+    assert guest_client_fk.ondelete == "SET NULL"
 
 
 def test_salon_invite_code_is_database_owned_business_logic():
