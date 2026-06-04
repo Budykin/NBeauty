@@ -147,7 +147,8 @@ export interface ApiAppointment {
   salonId?: string
   masterId: number
   masterName: string
-  clientId: number
+  clientId?: number | null
+  guestClientId?: number | null
   clientName: string
   serviceName: string
   resourceId?: number
@@ -239,6 +240,27 @@ export interface ApiMasterReview {
 export interface ApiTimeSlot {
   start: string
   end: string
+}
+
+export interface ApiClient {
+  id: string
+  type: "registered" | "guest"
+  fullName: string
+  telephoneNumber?: string | null
+  username?: string | null
+  note: string
+  appointmentsCount: number
+  lastAppointmentAt?: string | null
+  history?: ApiClientHistoryItem[]
+}
+
+export interface ApiClientHistoryItem {
+  id: number
+  serviceName: string
+  startTime: string
+  endTime: string
+  status: AppointmentStatus
+  createdAt: string
 }
 
 export interface ApiAuthResponse {
@@ -501,6 +523,31 @@ export const apiAppointments = {
   complete(id: number) {
     return request<ApiAppointment>(`/appointments/${id}/complete`, {
       method: "PUT",
+    })
+  },
+}
+
+export const apiClients = {
+  list(search?: string) {
+    const params = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""
+    return request<ApiClient[]>(`/clients/my${params}`)
+  },
+
+  getById(type: "registered" | "guest", id: string) {
+    return request<ApiClient>(`/clients/my/${type}/${id}`)
+  },
+
+  createGuest(data: { fullName: string; telephoneNumber?: string; note?: string }) {
+    return request<ApiClient>("/clients/guest", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  },
+
+  updateNote(type: "registered" | "guest", id: string, note: string) {
+    return request<ApiClient>(`/clients/my/${type}/${id}/note`, {
+      method: "PUT",
+      body: JSON.stringify({ note }),
     })
   },
 }

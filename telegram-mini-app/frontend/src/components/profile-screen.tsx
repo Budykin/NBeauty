@@ -5,7 +5,7 @@ import { Clock, Settings, ChevronRight, ArrowLeftRight, Building2, Users, Crown,
 import { Switch } from "@/components/ui/switch"
 import { apiSalons } from "@/lib/api"
 import { mapSalons } from "@/lib/mappers"
-import type { Role, Salon } from "@/lib/types"
+import type { Role, Salon, Screen } from "@/lib/types"
 
 interface ProfileScreenProps {
   role: Role
@@ -17,7 +17,7 @@ interface ProfileScreenProps {
   currentUserAvatar?: string
   onToggleRole: () => void
   onBecomeMaster: () => void
-  onNavigate: (screen: "working-hours" | "salon-dashboard" | "edit-profile") => void
+  onNavigate: (screen: Screen) => void
   onOpenPlatformAdmin?: () => void
   isPlatformAdmin?: boolean
   onSelectSalon: (salon: Salon) => void
@@ -250,6 +250,18 @@ export function ProfileScreen({
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </div>
               <span className="text-sm font-medium text-card-foreground">Рабочие часы</span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => onNavigate("my-clients")}
+            className="flex items-center justify-between rounded-xl border border-border bg-card p-3 transition-all active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-secondary">
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <span className="text-sm font-medium text-card-foreground">Мои клиенты</span>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>

@@ -31,6 +31,8 @@ def test_crud_routes_are_registered():
     paths = {route.path for route in app.routes}
 
     assert "/api/bookings/create" in paths
+    assert "/api/clients/my" in paths
+    assert "/api/clients/guest" in paths
     assert "/api/reviews/" in paths
     assert "/api/salons/create" in paths
     assert "/api/appointments/{appointment_id}/confirm" in paths

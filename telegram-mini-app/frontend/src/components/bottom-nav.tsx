@@ -36,7 +36,7 @@ export function BottomNav({ currentScreen, role, onNavigate }: BottomNavProps) {
     if (tabId === "service-management" && currentScreen === "service-management") return true
     if (tabId === "discovery" && (currentScreen === "discovery" || currentScreen === "booking-wizard")) return true
     if (tabId === "my-bookings" && currentScreen === "my-bookings") return true
-    if (tabId === "profile" && currentScreen === "profile") return true
+    if (tabId === "profile" && (currentScreen === "profile" || currentScreen === "edit-profile" || currentScreen === "my-clients")) return true
     return currentScreen === tabId
   }
 

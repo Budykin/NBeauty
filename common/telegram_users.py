@@ -18,20 +18,23 @@ async def upsert_telegram_user(
 ) -> User:
     """Создать или обновить пользователя Telegram.
 
-    Username в Telegram может меняться и должен оставаться уникальным в БД,
-    поэтому при конфликте не перезаписываем его чужим значением.
+    Пользователь всегда определяется по постоянному tg_id.
+    Username может меняться или исчезать, поэтому обновляем его отдельно
+    и только если это не нарушает UNIQUE-ограничение.
     """
 
     result = await session.execute(select(User).where(User.tg_id == tg_id))
     user = result.scalar_one_or_none()
 
     safe_username = username
+    username_conflict = False
     if username:
         username_result = await session.execute(
             select(User).where(User.username == username, User.tg_id != tg_id)
         )
         if username_result.scalar_one_or_none():
             safe_username = None
+            username_conflict = True
 
     normalized_telephone_number = normalize_telephone_number(telephone_number)
 
@@ -52,7 +55,9 @@ async def upsert_telegram_user(
     # Пользователь мог изменить full_name в настройках приложения, и это значение — source of truth.
     if not user.full_name or user.full_name == "Неизвестный пользователь":
         user.full_name = full_name or user.full_name
-    if safe_username is not None:
+    if username is None:
+        user.username = None
+    elif not username_conflict:
         user.username = safe_username
     if user.avatar is None and avatar is not None:
         user.avatar = avatar

@@ -43,7 +43,7 @@ async def auto_complete_due_appointments(session: AsyncSession) -> int:
     if appointments:
         await session.flush()
         for appointment in appointments:
-            if appointment.review is None:
+            if appointment.review is None and appointment.client_id is not None:
                 asyncio.create_task(
                     notify_review_request(
                         client_tg_id=appointment.client_id,

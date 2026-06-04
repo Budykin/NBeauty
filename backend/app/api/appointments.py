@@ -30,6 +30,7 @@ def _appointment_options():
         selectinload(Appointment.service),
         selectinload(Appointment.master),
         selectinload(Appointment.client),
+        selectinload(Appointment.guest_client),
         selectinload(Appointment.salon),
     )
 
@@ -41,7 +42,14 @@ def _to_appointment_out(appointment: Appointment) -> AppointmentOut:
         master_id=appointment.master_id,
         master_name=appointment.master.full_name if appointment.master else "Неизвестный",
         client_id=appointment.client_id,
-        client_name=appointment.client.full_name if appointment.client else "Неизвестный",
+        guest_client_id=appointment.guest_client_id,
+        client_name=(
+            appointment.client.full_name
+            if appointment.client
+            else appointment.guest_client.full_name
+            if appointment.guest_client
+            else "Неизвестный"
+        ),
         service_name=appointment.service.name if appointment.service else "Неизвестная услуга",
         resource_id=appointment.resource_id,
         start_time=appointment.start_time,

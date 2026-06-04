@@ -6,6 +6,7 @@ import type {
   Resource,
   Service,
   Appointment,
+  ClientRecord,
   Master,
   SalonMember,
   Salon,
@@ -16,6 +17,7 @@ import type {
   ApiResource,
   ApiService,
   ApiAppointment,
+  ApiClient,
   ApiSalon,
   ApiSalonMember,
   ApiSchedule,
@@ -88,7 +90,8 @@ export function mapAppointment(
   return {
     id: String(api.id),
     clientName: api.clientName,
-    clientId: String(api.clientId),
+    clientId: api.clientId ? String(api.clientId) : undefined,
+    guestClientId: api.guestClientId ? String(api.guestClientId) : undefined,
     masterId: String(api.masterId),
     masterName: api.masterName,
     service,
@@ -125,6 +128,27 @@ export function mapMaster(master: ApiMaster): Master {
       ? mergeSchedulesWithDefaultWeek(master.schedules)
       : undefined,
     salonId: master.salonId ?? undefined,
+  }
+}
+
+export function mapClient(client: ApiClient): ClientRecord {
+  return {
+    id: client.id,
+    type: client.type,
+    fullName: client.fullName,
+    telephoneNumber: client.telephoneNumber ?? undefined,
+    username: client.username ?? undefined,
+    note: client.note,
+    appointmentsCount: client.appointmentsCount,
+    lastAppointmentAt: client.lastAppointmentAt ?? undefined,
+    history: client.history?.map((item) => ({
+      id: String(item.id),
+      serviceName: item.serviceName,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      status: normalizeAppointmentStatus(item.status),
+      createdAt: item.createdAt,
+    })),
   }
 }
 
@@ -251,4 +275,8 @@ export function mapSalons(arr: ApiSalon[]): Salon[] {
 
 export function mapMasters(arr: ApiMaster[]): Master[] {
   return arr.map(mapMaster)
+}
+
+export function mapClients(arr: ApiClient[]): ClientRecord[] {
+  return arr.map(mapClient)
 }

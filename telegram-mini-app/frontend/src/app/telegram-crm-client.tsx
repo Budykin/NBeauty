@@ -9,6 +9,7 @@ import { DevLoginScreen } from "@/components/dev-login-screen"
 import { DiscoveryScreen } from "@/components/discovery-screen"
 import { EditProfile } from "@/components/edit-profile"
 import { MasterDashboard } from "@/components/master-dashboard"
+import { MyClientsScreen } from "@/components/my-clients-screen"
 import { MyBookingsScreen } from "@/components/my-bookings"
 import { PlatformAdminScreen } from "@/components/platform-admin-screen"
 import { ProfileScreen } from "@/components/profile-screen"
@@ -73,6 +74,7 @@ const PRESERVED_SCREENS = new Set<Screen>([
   "working-hours",
   "service-management",
   "platform-admin",
+  "my-clients",
 ])
 
 const AUTO_REFRESH_INTERVAL_MS = 5000
@@ -817,6 +819,12 @@ export default function TelegramCRMClient() {
                   isPlatformAdmin={isPlatformAdmin}
                   onOpenPlatformAdmin={() => setScreen("platform-admin")}
                 />
+              </motion.div>
+            ) : null}
+
+            {viewMode === "master" && screen === "my-clients" ? (
+              <motion.div key="my-clients" {...pageVariants} transition={{ duration: 0.2 }}>
+                <MyClientsScreen onBack={() => setScreen("profile")} />
               </motion.div>
             ) : null}
 

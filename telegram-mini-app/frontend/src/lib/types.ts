@@ -20,7 +20,8 @@ export interface Service {
 export interface Appointment {
   id: string
   clientName: string
-  clientId: string
+  clientId?: string
+  guestClientId?: string
   masterId: string
   masterName: string
   service: Service
@@ -83,6 +84,29 @@ export interface WorkingHours {
   end: string
 }
 
+export type ClientType = "registered" | "guest"
+
+export interface ClientHistoryItem {
+  id: string
+  serviceName: string
+  startTime: string
+  endTime: string
+  status: AppointmentStatus
+  createdAt: string
+}
+
+export interface ClientRecord {
+  id: string
+  type: ClientType
+  fullName: string
+  telephoneNumber?: string
+  username?: string
+  note: string
+  appointmentsCount: number
+  lastAppointmentAt?: string
+  history?: ClientHistoryItem[]
+}
+
 export type Screen =
   | "dashboard"
   | "services"
@@ -94,6 +118,7 @@ export type Screen =
   | "discovery"
   | "booking-wizard"
   | "my-bookings"
+  | "my-clients"
   | "salon-dashboard"
   | "salon-members"
   | "salon-resources"

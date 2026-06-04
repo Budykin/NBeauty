@@ -107,6 +107,19 @@ class User(Base):
         back_populates="client",
         foreign_keys="Appointment.client_id",
     )
+    guest_clients: Mapped[List["GuestClient"]] = relationship(
+        back_populates="master",
+        foreign_keys="GuestClient.master_id",
+        cascade="all, delete-orphan",
+    )
+    client_notes: Mapped[List["ClientNote"]] = relationship(
+        back_populates="master",
+        foreign_keys="ClientNote.master_id",
+    )
+    notes_as_client: Mapped[List["ClientNote"]] = relationship(
+        back_populates="registered_client",
+        foreign_keys="ClientNote.client_id",
+    )
     schedules: Mapped[List["MasterSchedule"]] = relationship(
         back_populates="master",
         cascade="all, delete-orphan",
@@ -401,6 +414,89 @@ class MasterSchedule(Base):
     )
 
 
+class GuestClient(Base):
+    __tablename__ = "guest_clients"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    master_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.tg_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    telephone_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    master: Mapped[User] = relationship(back_populates="guest_clients", foreign_keys=[master_id])
+    appointments: Mapped[List["Appointment"]] = relationship(back_populates="guest_client")
+    notes: Mapped[List["ClientNote"]] = relationship(
+        back_populates="guest_client",
+        foreign_keys="ClientNote.guest_client_id",
+    )
+
+
+class ClientNote(Base):
+    __tablename__ = "client_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    master_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.tg_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    client_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("users.tg_id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    guest_client_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("guest_clients.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    note: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    master: Mapped[User] = relationship(back_populates="client_notes", foreign_keys=[master_id])
+    registered_client: Mapped[Optional[User]] = relationship(
+        back_populates="notes_as_client",
+        foreign_keys=[client_id],
+    )
+    guest_client: Mapped[Optional[GuestClient]] = relationship(
+        back_populates="notes",
+        foreign_keys=[guest_client_id],
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(client_id IS NOT NULL AND guest_client_id IS NULL) OR (client_id IS NULL AND guest_client_id IS NOT NULL)",
+            name="chk_client_notes_client_xor_guest",
+        ),
+    )
+
+
 class Appointment(Base):
     """Запись клиента к мастеру."""
 
@@ -419,10 +515,16 @@ class Appointment(Base):
         nullable=False,
         index=True,
     )
-    client_id: Mapped[int] = mapped_column(
+    client_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         ForeignKey("users.tg_id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    guest_client_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("guest_clients.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
     resource_id: Mapped[Optional[int]] = mapped_column(
@@ -462,13 +564,18 @@ class Appointment(Base):
 
     salon: Mapped[Optional[Salon]] = relationship(back_populates="appointments")
     master: Mapped[User] = relationship(back_populates="master_appointments", foreign_keys=[master_id])
-    client: Mapped[User] = relationship(back_populates="client_appointments", foreign_keys=[client_id])
+    client: Mapped[Optional[User]] = relationship(back_populates="client_appointments", foreign_keys=[client_id])
+    guest_client: Mapped[Optional[GuestClient]] = relationship(back_populates="appointments", foreign_keys=[guest_client_id])
     resource: Mapped[Optional[Resource]] = relationship(back_populates="appointments")
     service: Mapped[Service] = relationship(back_populates="appointments")
     review: Mapped[Optional["Review"]] = relationship(back_populates="appointment")
 
     __table_args__ = (
         CheckConstraint("start_time < end_time", name="chk_appointments_time"),
+        CheckConstraint(
+            "(client_id IS NOT NULL AND guest_client_id IS NULL) OR (client_id IS NULL AND guest_client_id IS NOT NULL)",
+            name="chk_appointments_client_xor_guest",
+        ),
     )
 
 

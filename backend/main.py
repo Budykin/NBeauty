@@ -13,6 +13,7 @@ from common.appointments import auto_complete_due_appointments
 from backend.app.api import appointments as appointments_router
 from backend.app.api import auth as auth_router
 from backend.app.api import bookings as bookings_router
+from backend.app.api import clients as clients_router
 from backend.app.api import masters as masters_router
 from backend.app.api import platform_admin as platform_admin_router
 from backend.app.api import profile as profile_router
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(salons_router.router, prefix="/api/salons", tags=["salons"])
     app.include_router(salon_actions_router.router, prefix="/api/salons", tags=["salon-actions"])
     app.include_router(bookings_router.router, prefix="/api/bookings", tags=["bookings"])
+    app.include_router(clients_router.router, prefix="/api/clients", tags=["clients"])
     app.include_router(services_router.router, prefix="/api/services", tags=["services"])
     app.include_router(schedules_router.router, prefix="/api/schedules", tags=["schedules"])
     app.include_router(appointments_router.router, prefix="/api/appointments", tags=["appointments"])

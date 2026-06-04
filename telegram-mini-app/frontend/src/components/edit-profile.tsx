@@ -232,7 +232,6 @@ export function EditProfile({
               isLoading && "opacity-50 cursor-not-allowed",
             )}
           />
-          <p className="text-xs text-muted-foreground">Разрешены `+`, цифры, пробелы, скобки и дефисы</p>
         </div>
       </div>
 
