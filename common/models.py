@@ -438,7 +438,10 @@ class GuestClient(Base):
     )
 
     master: Mapped[User] = relationship(back_populates="guest_clients", foreign_keys=[master_id])
-    appointments: Mapped[List["Appointment"]] = relationship(back_populates="guest_client")
+    appointments: Mapped[List["Appointment"]] = relationship(
+        back_populates="guest_client",
+        passive_deletes=True,
+    )
     notes: Mapped[List["ClientNote"]] = relationship(
         back_populates="guest_client",
         foreign_keys="ClientNote.guest_client_id",
@@ -573,7 +576,7 @@ class Appointment(Base):
     __table_args__ = (
         CheckConstraint("start_time < end_time", name="chk_appointments_time"),
         CheckConstraint(
-            "(client_id IS NOT NULL AND guest_client_id IS NULL) OR (client_id IS NULL AND guest_client_id IS NOT NULL)",
+            "NOT (client_id IS NOT NULL AND guest_client_id IS NOT NULL)",
             name="chk_appointments_client_xor_guest",
         ),
     )

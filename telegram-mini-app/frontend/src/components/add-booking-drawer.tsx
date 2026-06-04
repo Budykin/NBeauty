@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
 import { CalendarDays, Check, Clock3, Loader2, Plus, UserRound } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -64,13 +65,37 @@ function addMinutes(timeStr: string, deltaMinutes: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
 }
 
-function generateMockSlots(durationMinutes: number): TimeSlot[] {
+function generateMockSlots(durationMinutes: number, stepMinutes: number): TimeSlot[] {
   const slots: TimeSlot[] = []
-  for (let cursor = 9 * 60; cursor + durationMinutes <= 18 * 60; cursor += 15) {
+  for (let cursor = 9 * 60; cursor + durationMinutes <= 18 * 60; cursor += stepMinutes) {
     const start = `${String(Math.floor(cursor / 60)).padStart(2, "0")}:${String(cursor % 60).padStart(2, "0")}`
     slots.push({ start, end: addMinutes(start, durationMinutes) })
   }
   return slots
+}
+
+function isFutureSlot(dateStr: string, timeStr: string) {
+  const [year, month, day] = dateStr.split("-").map(Number)
+  const [hours, minutes] = timeStr.split(":").map(Number)
+  const slotDate = new Date(year, month - 1, day, hours, minutes, 0, 0)
+  return slotDate.getTime() > Date.now()
+}
+
+function filterFutureSlots(slots: TimeSlot[], dateStr: string) {
+  return slots.filter((slot) => isFutureSlot(dateStr, slot.start))
+}
+
+function pickNearestSlot(reference: string, slots: TimeSlot[]): TimeSlot | null {
+  if (slots.length === 0) return null
+
+  const referenceMinutes = toMinutes(reference)
+  return slots.reduce((best, slot) => {
+    const bestDiff = Math.abs(toMinutes(best.start) - referenceMinutes)
+    const nextDiff = Math.abs(toMinutes(slot.start) - referenceMinutes)
+    if (nextDiff < bestDiff) return slot
+    if (nextDiff === bestDiff && toMinutes(slot.start) < toMinutes(best.start)) return slot
+    return best
+  })
 }
 
 function getTelephoneNumberError(value: string) {
@@ -126,6 +151,7 @@ export function AddBookingDrawer({
   selectedDate,
   onCreated,
 }: AddBookingDrawerProps) {
+  const [drawerServices, setDrawerServices] = useState<Service[]>([])
   const [clientMode, setClientMode] = useState<ClientMode>("existing")
   const [clients, setClients] = useState<ClientRecord[]>([])
   const [clientsLoading, setClientsLoading] = useState(false)
@@ -134,20 +160,24 @@ export function AddBookingDrawer({
   const [selectedClientKey, setSelectedClientKey] = useState<string | null>(null)
   const [selectedServiceId, setSelectedServiceId] = useState<string>("")
   const [selectedDateValue, setSelectedDateValue] = useState("")
-  const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
+  const [availableSlots15, setAvailableSlots15] = useState<TimeSlot[]>([])
+  const [availableSlots5, setAvailableSlots5] = useState<TimeSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
-  const [selectedSlotStart, setSelectedSlotStart] = useState<string | null>(null)
+  const [selectedBaseStart, setSelectedBaseStart] = useState<string | null>(null)
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [draftName, setDraftName] = useState("")
   const [draftPhone, setDraftPhone] = useState("")
   const [draftPhoneTouched, setDraftPhoneTouched] = useState(false)
   const [draftNote, setDraftNote] = useState("")
   const [submitPending, setSubmitPending] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const refineContainerRef = useRef<HTMLDivElement | null>(null)
+  const wasOpenRef = useRef(false)
 
   const selectedService = useMemo(
-    () => services.find((service) => service.id === selectedServiceId) ?? null,
-    [selectedServiceId, services],
+    () => drawerServices.find((service) => service.id === selectedServiceId) ?? null,
+    [drawerServices, selectedServiceId],
   )
   const selectedClient = useMemo(
     () => clients.find((client) => `${client.type}-${client.id}` === selectedClientKey) ?? null,
@@ -162,9 +192,17 @@ export function AddBookingDrawer({
       return haystack.includes(query)
     })
   }, [clientQuery, clients])
-  const selectedSlot = useMemo(
-    () => availableSlots.find((slot) => slot.start === selectedSlotStart) ?? null,
-    [availableSlots, selectedSlotStart],
+  const refinedSlots = useMemo(() => {
+    if (!selectedBaseStart) return []
+
+    const baseMinutes = toMinutes(selectedBaseStart)
+    return availableSlots5
+      .filter((slot) => Math.abs(toMinutes(slot.start) - baseMinutes) <= 30)
+      .sort((left, right) => toMinutes(left.start) - toMinutes(right.start))
+  }, [availableSlots5, selectedBaseStart])
+  const selectedSlotSummary = useMemo(
+    () => (selectedSlot ? `${selectedDateValue} · ${selectedSlot.start} - ${selectedSlot.end}` : null),
+    [selectedDateValue, selectedSlot],
   )
   const draftPhoneError = getTelephoneNumberError(draftPhone)
   const shouldShowDraftPhoneError = draftPhoneTouched && draftPhoneError !== null
@@ -190,16 +228,25 @@ export function AddBookingDrawer({
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      wasOpenRef.current = false
+      return
+    }
+    if (wasOpenRef.current) return
 
+    wasOpenRef.current = true
+
+    setDrawerServices(services.map((service) => ({ ...service })))
     setClientMode("existing")
     setClientQuery("")
     setSelectedClientKey(null)
     setSelectedServiceId("")
     setSelectedDateValue(formatDateInput(selectedDate))
-    setAvailableSlots([])
+    setAvailableSlots15([])
+    setAvailableSlots5([])
     setSlotsError(null)
-    setSelectedSlotStart(null)
+    setSelectedBaseStart(null)
+    setSelectedSlot(null)
     setDraftName("")
     setDraftPhone("")
     setDraftPhoneTouched(false)
@@ -216,13 +263,15 @@ export function AddBookingDrawer({
     }
 
     void loadClients()
-  }, [loadClients, open, selectedDate])
+  }, [loadClients, open, selectedDate, services])
 
   useEffect(() => {
     if (!open || !selectedService || !selectedDateValue) {
-      setAvailableSlots([])
+      setAvailableSlots15([])
+      setAvailableSlots5([])
       setSlotsError(null)
-      setSelectedSlotStart(null)
+      setSelectedBaseStart(null)
+      setSelectedSlot(null)
       return
     }
 
@@ -234,31 +283,47 @@ export function AddBookingDrawer({
 
       try {
         if (IS_DEV_AUTH_BYPASS) {
+          const duration = Math.max(1, selectedService.duration)
           if (cancelled) return
-          setAvailableSlots(generateMockSlots(selectedService.duration))
+          setAvailableSlots15(filterFutureSlots(generateMockSlots(duration, 15), selectedDateValue))
+          setAvailableSlots5(filterFutureSlots(generateMockSlots(duration, 5), selectedDateValue))
           return
         }
 
-        const slots = await apiMasters.slots(
-          Number(masterId),
-          Number(selectedService.id),
-          selectedDateValue,
-          15,
-        )
+        const [slots15Raw, slots5Raw] = await Promise.all([
+          apiMasters.slots(
+            Number(masterId),
+            Number(selectedService.id),
+            selectedDateValue,
+            15,
+          ),
+          apiMasters.slots(
+            Number(masterId),
+            Number(selectedService.id),
+            selectedDateValue,
+            5,
+          ),
+        ])
 
         if (cancelled) return
 
-        setAvailableSlots(
-          slots.map((slot) => ({
-            start: formatSlotTime(slot.start),
-            end: formatSlotTime(slot.end),
-          })),
-        )
+        const mapped15 = slots15Raw.map((slot) => ({
+          start: formatSlotTime(slot.start),
+          end: formatSlotTime(slot.end),
+        }))
+        const mapped5 = slots5Raw.map((slot) => ({
+          start: formatSlotTime(slot.start),
+          end: formatSlotTime(slot.end),
+        }))
+
+        setAvailableSlots15(filterFutureSlots(mapped15, selectedDateValue))
+        setAvailableSlots5(filterFutureSlots(mapped5, selectedDateValue))
       } catch (error) {
         if (cancelled) return
 
         console.error("Load master slots failed:", error)
-        setAvailableSlots([])
+        setAvailableSlots15([])
+        setAvailableSlots5([])
         setSlotsError("Не удалось загрузить свободное время. Попробуй другую дату или услугу.")
       } finally {
         if (!cancelled) {
@@ -267,13 +332,54 @@ export function AddBookingDrawer({
       }
     }
 
-    setSelectedSlotStart(null)
     void loadSlots()
 
     return () => {
       cancelled = true
     }
-  }, [masterId, open, selectedDateValue, selectedService])
+  }, [masterId, open, selectedDateValue, selectedServiceId, selectedService])
+
+  useEffect(() => {
+    setSelectedBaseStart((previous) => {
+      if (!previous) return previous
+      return availableSlots15.some((slot) => slot.start === previous) ? previous : null
+    })
+
+    setSelectedSlot((previous) => {
+      if (!previous) return previous
+      return availableSlots5.some((slot) => slot.start === previous.start && slot.end === previous.end)
+        ? previous
+        : null
+    })
+  }, [availableSlots15, availableSlots5])
+
+  useEffect(() => {
+    if (!selectedBaseStart) {
+      setSelectedSlot(null)
+      return
+    }
+
+    if (refinedSlots.length === 0) {
+      setSelectedSlot(null)
+      return
+    }
+
+    setSelectedSlot((previous) => {
+      if (previous && refinedSlots.some((slot) => slot.start === previous.start && slot.end === previous.end)) {
+        return previous
+      }
+      return pickNearestSlot(selectedBaseStart, refinedSlots)
+    })
+  }, [refinedSlots, selectedBaseStart])
+
+  useEffect(() => {
+    if (!selectedSlot?.start || !refineContainerRef.current) return
+
+    const element = refineContainerRef.current.querySelector<HTMLButtonElement>(
+      `[data-slot="${selectedSlot.start}"]`,
+    )
+    element?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" })
+  }, [selectedSlot?.start, refinedSlots.length])
 
   async function handleSubmit() {
     if (!selectedService || !selectedDateValue || !selectedSlot) return
@@ -311,17 +417,14 @@ export function AddBookingDrawer({
             appointmentsCount: 0,
           }
         } else {
-          bookingTarget = mapClient(
+          const createdGuest = mapClient(
             await apiClients.createGuest({
               fullName: draftName.trim(),
               telephoneNumber: draftPhone.trim(),
               note: draftNote.trim() || "",
             }),
           )
-          setClients((previous) => {
-            const next = previous.filter((client) => !(client.type === bookingTarget.type && client.id === bookingTarget.id))
-            return [bookingTarget, ...next]
-          })
+          bookingTarget = createdGuest
         }
       }
 
@@ -513,12 +616,16 @@ export function AddBookingDrawer({
                 <p className="text-sm font-semibold text-card-foreground">Услуга</p>
               </div>
               <div className="mt-3 flex flex-col gap-2">
-                {services.length > 0 ? (
-                  services.map((service) => (
+                {drawerServices.length > 0 ? (
+                  drawerServices.map((service) => (
                     <button
                       key={service.id}
                       type="button"
-                      onClick={() => setSelectedServiceId(service.id)}
+                      onClick={() => {
+                        setSelectedServiceId(service.id)
+                        setSelectedBaseStart(null)
+                        setSelectedSlot(null)
+                      }}
                       className={`rounded-xl border p-3 text-left transition-all ${
                         selectedServiceId === service.id
                           ? "border-primary bg-accent"
@@ -551,7 +658,11 @@ export function AddBookingDrawer({
                 type="date"
                 value={selectedDateValue}
                 min={formatDateInput(new Date())}
-                onChange={(event) => setSelectedDateValue(event.target.value)}
+                onChange={(event) => {
+                  setSelectedDateValue(event.target.value)
+                  setSelectedBaseStart(null)
+                  setSelectedSlot(null)
+                }}
                 className="mt-3 rounded-xl border-border bg-background"
               />
             </section>
@@ -576,22 +687,58 @@ export function AddBookingDrawer({
               ) : null}
 
               {!slotsLoading ? (
-                availableSlots.length > 0 ? (
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    {availableSlots.map((slot) => (
-                      <button
-                        key={slot.start}
-                        type="button"
-                        onClick={() => setSelectedSlotStart(slot.start)}
-                        className={`rounded-lg border px-2 py-2 text-sm font-medium transition-all ${
-                          selectedSlotStart === slot.start
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background text-foreground"
-                        }`}
-                      >
-                        {slot.start}
-                      </button>
-                    ))}
+                availableSlots15.length > 0 ? (
+                  <div className="mt-3 flex flex-col gap-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      {availableSlots15.map((slot) => (
+                        <button
+                          key={`${slot.start}-${slot.end}`}
+                          type="button"
+                          onClick={() => setSelectedBaseStart(slot.start)}
+                          className={`rounded-lg border py-2.5 text-sm font-medium transition-all ${
+                            selectedBaseStart === slot.start
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-background text-foreground"
+                          }`}
+                        >
+                          {slot.start}
+                        </button>
+                      ))}
+                    </div>
+
+                    <AnimatePresence>
+                      {selectedBaseStart && refinedSlots.length > 0 ? (
+                        <motion.div
+                          key="refine-slots"
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="flex flex-col gap-3"
+                        >
+                          <p className="text-xs font-medium text-muted-foreground">Уточни время</p>
+                          <div
+                            ref={refineContainerRef}
+                            className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                          >
+                            {refinedSlots.map((slot) => (
+                              <button
+                                key={`${slot.start}-${slot.end}`}
+                                type="button"
+                                data-slot={slot.start}
+                                onClick={() => setSelectedSlot(slot)}
+                                className={`min-w-24 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                                  selectedSlot?.start === slot.start
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border bg-background text-foreground"
+                                }`}
+                              >
+                                {slot.start}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
                   </div>
                 ) : (
                   <div className="mt-3 rounded-xl border border-border bg-background px-3 py-6 text-center text-sm text-muted-foreground">
@@ -604,7 +751,7 @@ export function AddBookingDrawer({
 
               {selectedSlot && selectedService ? (
                 <div className="mt-3 rounded-xl bg-secondary/60 px-3 py-2 text-sm text-secondary-foreground">
-                  {selectedDateValue} · {selectedSlot.start} - {selectedSlot.end} · {selectedService.name}
+                  {selectedSlotSummary} · {selectedService.name}
                 </div>
               ) : null}
             </section>

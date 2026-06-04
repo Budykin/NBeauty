@@ -338,18 +338,6 @@ async def delete_guest_client(
     if guest_client is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Клиент не найден")
 
-    appointments_count = await session.scalar(
-        select(func.count(Appointment.id)).where(
-            Appointment.master_id == current_user.tg_id,
-            Appointment.guest_client_id == guest_client_id,
-        )
-    )
-    if appointments_count:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Нельзя удалить клиента, у которого есть записи",
-        )
-
     await session.delete(guest_client)
     await session.commit()
 
