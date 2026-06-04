@@ -170,8 +170,8 @@ export function MyClientsScreen() {
         </button>
       </div>
 
-      <div>
-        <Input
+      <div className="relative">
+        <input
           id="client-search"
           name="client-search"
           type="text"
