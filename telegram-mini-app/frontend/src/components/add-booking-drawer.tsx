@@ -468,13 +468,13 @@ export function AddBookingDrawer({
 
   return (
     <Drawer open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DrawerContent className="max-h-[92svh]">
+      <DrawerContent className="inset-0 h-svh max-h-none w-full max-w-none rounded-none border-0">
         <DrawerHeader>
           <DrawerTitle>Новая запись</DrawerTitle>
           <DrawerDescription>Выбери клиента, услугу, дату и свободное время.</DrawerDescription>
         </DrawerHeader>
 
-        <div className="overflow-y-auto px-4 pb-6">
+        <div className="flex-1 overflow-y-auto px-4 pb-6">
           <div className="flex flex-col gap-4">
             {submitError ? (
               <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
