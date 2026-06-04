@@ -57,7 +57,6 @@ import type {
   WorkingHours,
 } from "@/lib/types"
 import { useAuthSession } from "@/hooks/use-auth-session"
-import { usePeriodicRefresh } from "@/hooks/use-periodic-refresh"
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -330,13 +329,6 @@ export default function TelegramCRMClient() {
     setDataError(null)
     setDeepLinkHandled(true)
   }, [appLoading, deepLinkHandled, deepLinkedMasterId, masters])
-
-  // Периодическое обновление данных каждые 30 секунд
-  usePeriodicRefresh(
-    () => void loadAppData(),
-    30000, // 30 секунд
-    authState.status === "ready" && isAuthenticated() && !appLoading
-  )
 
   const handleNavigate = useCallback((nextScreen: Screen) => {
     setScreen(nextScreen)
