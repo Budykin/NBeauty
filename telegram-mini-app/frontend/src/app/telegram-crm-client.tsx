@@ -824,7 +824,7 @@ export default function TelegramCRMClient() {
 
             {viewMode === "master" && screen === "my-clients" ? (
               <motion.div key="my-clients" {...pageVariants} transition={{ duration: 0.2 }}>
-                <MyClientsScreen onBack={() => setScreen("profile")} />
+                <MyClientsScreen />
               </motion.div>
             ) : null}
 

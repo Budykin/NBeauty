@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { motion } from "framer-motion"
-import { ArrowLeft, ChevronRight, Phone, Plus, Search, StickyNote, UserRound } from "lucide-react"
+import { ChevronRight, Phone, Plus, StickyNote, UserRound } from "lucide-react"
 
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge"
 import { Button } from "@/components/ui/button"
@@ -20,16 +20,12 @@ import { ApiError, apiClients } from "@/lib/api"
 import { mapClient, mapClients } from "@/lib/mappers"
 import type { ClientRecord } from "@/lib/types"
 
-interface MyClientsScreenProps {
-  onBack: () => void
-}
-
 const statusLabel = {
   registered: "Зарегистрированный",
   guest: "Незарегистрированный",
 } as const
 
-export function MyClientsScreen({ onBack }: MyClientsScreenProps) {
+export function MyClientsScreen() {
   const [clients, setClients] = useState<ClientRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -123,35 +119,29 @@ export function MyClientsScreen({ onBack }: MyClientsScreenProps) {
   return (
     <div className="flex flex-col gap-4 px-4 pb-4 pt-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground"
-            aria-label="Назад"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-lg font-semibold text-foreground">Мои клиенты</h1>
-            <p className="text-sm text-muted-foreground">Зарегистрированные и гостевые клиенты мастера</p>
-          </div>
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">Мои клиенты</h1>
+          <p className="text-sm text-muted-foreground">Зарегистрированные и гостевые клиенты мастера</p>
         </div>
         <button
           onClick={() => setIsAddOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95"
           aria-label="Добавить клиента"
         >
-          <Plus className="h-5 w-5" />
+          <Plus className="h-3.5 w-3.5" />
+          Добавить
         </button>
       </div>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <div>
         <Input
+          id="client-search"
+          name="client-search"
+          type="text"
+          placeholder="Поиск клиентов..."
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Поиск по имени или номеру"
-          className="pl-9"
+          className="w-full rounded-xl border border-border bg-secondary/50 px-4 py-3 pl-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
 
