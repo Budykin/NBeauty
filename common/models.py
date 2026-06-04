@@ -445,6 +445,7 @@ class GuestClient(Base):
     notes: Mapped[List["ClientNote"]] = relationship(
         back_populates="guest_client",
         foreign_keys="ClientNote.guest_client_id",
+        passive_deletes=True,
     )
 
 
