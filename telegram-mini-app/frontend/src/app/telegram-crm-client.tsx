@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 
 import { BottomNav } from "@/components/bottom-nav"
@@ -75,6 +75,8 @@ const PRESERVED_SCREENS = new Set<Screen>([
   "platform-admin",
 ])
 
+const AUTO_REFRESH_INTERVAL_MS = 5000
+
 function dedupeAppointments(appointments: Appointment[]) {
   const unique = new Map<string, Appointment>()
   appointments.forEach((appointment) => {
@@ -96,6 +98,14 @@ function collectResources(salons: Salon[]) {
     })
   })
   return Array.from(unique.values())
+}
+
+function shouldIncludeCommonData(targetRole: Role, lastLoadedRole: Role | null) {
+  if (targetRole === "client") {
+    return true
+  }
+
+  return lastLoadedRole !== targetRole
 }
 
 export default function TelegramCRMClient() {
@@ -121,6 +131,8 @@ export default function TelegramCRMClient() {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false)
   const [deepLinkedMasterId, setDeepLinkedMasterId] = useState<string | null>(null)
   const [deepLinkHandled, setDeepLinkHandled] = useState(false)
+  const dataLoadInFlightRef = useRef(false)
+  const lastLoadedRoleRef = useRef<Role | null>(null)
 
   const currentSalon = salons.find((salon) =>
     salon.members.some((member) => member.masterId === currentUserId),
@@ -132,8 +144,107 @@ export default function TelegramCRMClient() {
     )
   }, [])
 
-  const loadAppData = useCallback(async () => {
+  const handleSettledUnauthorized = useCallback((results: PromiseSettledResult<unknown>[]) => {
+    const unauthorizedResult = results.find(
+      (result) => result.status === "rejected" && result.reason instanceof ApiError && result.reason.status === 401,
+    )
+
+    if (unauthorizedResult) {
+      retryAuth()
+      return true
+    }
+
+    return false
+  }, [retryAuth])
+
+  const loadCommonData = useCallback(async () => {
+    const [mastersResult, platformAdminResult] = await Promise.allSettled([
+      apiMasters.list(),
+      apiPlatformAdmin.me(),
+    ])
+
+    const settledResults = [mastersResult, platformAdminResult]
+    if (handleSettledUnauthorized(settledResults)) {
+      return { unauthorized: true, partialFailure: false }
+    }
+
+    if (mastersResult.status === "fulfilled") {
+      setMasters(mapMasters(mastersResult.value))
+    }
+
+    setIsPlatformAdmin(platformAdminResult.status === "fulfilled" ? platformAdminResult.value.isAdmin : false)
+
+    return {
+      unauthorized: false,
+      partialFailure: settledResults.some((result) => result.status === "rejected"),
+    }
+  }, [handleSettledUnauthorized])
+
+  const loadMasterData = useCallback(async () => {
+    const [salonsResult, servicesResult, schedulesResult, appointmentsResult, historyResult] = await Promise.allSettled([
+      apiSalons.my(),
+      apiServices.my(),
+      apiSchedules.my(),
+      apiAppointments.my("master"),
+      apiAppointments.history("master"),
+    ])
+
+    const settledResults = [salonsResult, servicesResult, schedulesResult, appointmentsResult, historyResult]
+    if (handleSettledUnauthorized(settledResults)) {
+      return { unauthorized: true, partialFailure: false }
+    }
+
+    setSalons(salonsResult.status === "fulfilled" ? mapSalons(salonsResult.value) : [])
+    setServices(servicesResult.status === "fulfilled" ? mapServices(servicesResult.value) : [])
+    setWorkingHours(
+      schedulesResult.status === "fulfilled" && schedulesResult.value.length > 0
+        ? mergeSchedulesWithDefaultWeek(schedulesResult.value)
+        : createDefaultWorkingHours(),
+    )
+    setAppointments(
+      dedupeAppointments([
+        ...(appointmentsResult.status === "fulfilled" ? mapAppointments(appointmentsResult.value) : []),
+        ...(historyResult.status === "fulfilled" ? mapAppointments(historyResult.value) : []),
+      ]),
+    )
+
+    return {
+      unauthorized: false,
+      partialFailure: settledResults.some((result) => result.status === "rejected"),
+    }
+  }, [handleSettledUnauthorized])
+
+  const loadClientData = useCallback(async () => {
+    const [appointmentsResult, historyResult] = await Promise.allSettled([
+      apiAppointments.my("client"),
+      apiAppointments.history("client"),
+    ])
+
+    const settledResults = [appointmentsResult, historyResult]
+    if (handleSettledUnauthorized(settledResults)) {
+      return { unauthorized: true, partialFailure: false }
+    }
+
+    setAppointments(
+      dedupeAppointments([
+        ...(appointmentsResult.status === "fulfilled" ? mapAppointments(appointmentsResult.value) : []),
+        ...(historyResult.status === "fulfilled" ? mapAppointments(historyResult.value) : []),
+      ]),
+    )
+
+    return {
+      unauthorized: false,
+      partialFailure: settledResults.some((result) => result.status === "rejected"),
+    }
+  }, [handleSettledUnauthorized])
+
+  const loadAppData = useCallback(async (targetRole?: Role, options?: { silent?: boolean; includeCommon?: boolean }) => {
     if (!isAuthenticated()) return
+    if (dataLoadInFlightRef.current) return
+
+    const activeRole = targetRole ?? viewMode
+    const includeCommon = options?.includeCommon ?? true
+    const silent = options?.silent ?? false
 
     if (IS_DEV_AUTH_BYPASS) {
       const isMasterAccount = role === "master"
@@ -147,122 +258,64 @@ export default function TelegramCRMClient() {
           return current
         }
 
-        return viewMode === "master" ? "dashboard" : "discovery"
+        return activeRole === "master" ? "dashboard" : "discovery"
       })
       setMasters(MOCK_MASTERS)
       setSalons(isMasterAccount ? MOCK_SALONS : [])
       setServices(isMasterAccount ? MOCK_SERVICES : [])
       setResources(isMasterAccount ? MOCK_RESOURCES : [])
       setWorkingHours(MOCK_WORKING_HOURS)
-      setAppointments(MOCK_APPOINTMENTS)
+      setAppointments(
+        MOCK_APPOINTMENTS.filter((appointment) =>
+          activeRole === "master" ? appointment.masterId === "m1" : appointment.clientId === "c1",
+        ),
+      )
       setDataError(null)
+      lastLoadedRoleRef.current = activeRole
       return
     }
 
-    setAppLoading(true)
+    dataLoadInFlightRef.current = true
+    if (!silent) {
+      setAppLoading(true)
+    }
     setDataError(null)
 
     try {
       const me = await apiProfile.getMe()
+      const nextRole = me.role as Role
+      const nextViewMode = nextRole !== "master" ? "client" : activeRole === "master" ? "master" : "client"
 
       setCurrentUserId(String(me.tgId))
       setCurrentUserName(me.fullName)
       setCurrentUserSpecialty(me.specialty)
       setCurrentUserAvatar(me.avatar)
-      setRole(me.role as Role)
-      setViewMode((current) => {
-        if (me.role !== "master") {
-          return "client"
-        }
-
-        return current === "client" && currentUserId === "client-self" ? "master" : current
-      })
+      setRole(nextRole)
+      setViewMode(nextViewMode)
       setScreen((current) => {
         if (PRESERVED_SCREENS.has(current)) {
           return current
         }
 
-        if (me.role === "master" && currentUserId === "client-self") {
-          return "dashboard"
-        }
-
-        return me.role === "master" && viewMode === "master" ? "dashboard" : "discovery"
+        return nextViewMode === "master" ? "dashboard" : "discovery"
       })
 
-      const [
-        mastersResult,
-        salonsResult,
-        servicesResult,
-        schedulesResult,
-        masterAppointmentsResult,
-        masterHistoryResult,
-        clientAppointmentsResult,
-        clientHistoryResult,
-        platformAdminResult,
-      ] = await Promise.allSettled([
-        apiMasters.list(),
-        apiSalons.my(),
-        apiServices.my(),
-        apiSchedules.my(),
-        apiAppointments.my("master"),
-        apiAppointments.history("master"),
-        apiAppointments.my("client"),
-        apiAppointments.history("client"),
-        apiPlatformAdmin.me(),
-      ])
+      const commonResult = includeCommon
+        ? await loadCommonData()
+        : { unauthorized: false, partialFailure: false }
 
-      const rejectedResults = [
-        mastersResult,
-        salonsResult,
-        servicesResult,
-        schedulesResult,
-        masterAppointmentsResult,
-        masterHistoryResult,
-        clientAppointmentsResult,
-        clientHistoryResult,
-        platformAdminResult,
-      ].filter((result) => result.status === "rejected")
-
-      const unauthorizedResult = rejectedResults.find(
-        (result) => result.reason instanceof ApiError && result.reason.status === 401,
-      )
-      if (unauthorizedResult) {
-        retryAuth()
+      if (commonResult.unauthorized) {
         return
       }
 
-      if (mastersResult.status === "fulfilled") {
-        setMasters(mapMasters(mastersResult.value))
+      const roleResult = nextViewMode === "master" ? await loadMasterData() : await loadClientData()
+      if (roleResult.unauthorized) {
+        return
       }
 
-      if (salonsResult.status === "fulfilled") {
-        setSalons(mapSalons(salonsResult.value))
-      } else {
-        setSalons([])
-      }
+      lastLoadedRoleRef.current = nextViewMode
 
-      if (servicesResult.status === "fulfilled") {
-        setServices(mapServices(servicesResult.value))
-      } else {
-        setServices([])
-      }
-
-      if (schedulesResult.status === "fulfilled" && schedulesResult.value.length > 0) {
-        setWorkingHours(mergeSchedulesWithDefaultWeek(schedulesResult.value))
-      } else {
-        setWorkingHours(createDefaultWorkingHours())
-      }
-
-      const nextAppointments = dedupeAppointments([
-        ...(masterAppointmentsResult.status === "fulfilled" ? mapAppointments(masterAppointmentsResult.value) : []),
-        ...(masterHistoryResult.status === "fulfilled" ? mapAppointments(masterHistoryResult.value) : []),
-        ...(clientAppointmentsResult.status === "fulfilled" ? mapAppointments(clientAppointmentsResult.value) : []),
-        ...(clientHistoryResult.status === "fulfilled" ? mapAppointments(clientHistoryResult.value) : []),
-      ])
-      setAppointments(nextAppointments)
-      setIsPlatformAdmin(platformAdminResult.status === "fulfilled" ? platformAdminResult.value.isAdmin : false)
-
-      if (rejectedResults.length > 0 && rejectedResults.length < 9) {
+      if (commonResult.partialFailure || roleResult.partialFailure) {
         setDataError("Часть данных не загрузилась. Основные функции доступны, но стоит проверить backend-логи.")
       }
     } catch (error) {
@@ -275,9 +328,12 @@ export default function TelegramCRMClient() {
 
       setDataError("Не удалось загрузить данные приложения. Проверь доступность backend и авторизацию.")
     } finally {
-      setAppLoading(false)
+      dataLoadInFlightRef.current = false
+      if (!silent) {
+        setAppLoading(false)
+      }
     }
-  }, [currentUserId, retryAuth, role, viewMode])
+  }, [handleSettledUnauthorized, loadClientData, loadCommonData, loadMasterData, retryAuth, role, viewMode])
 
   useEffect(() => {
     if (authState.status !== "ready" || !authState.auth) return
@@ -303,6 +359,33 @@ export default function TelegramCRMClient() {
     if (authState.status !== "ready" || !isAuthenticated()) return
     void loadAppData()
   }, [authState.status, loadAppData])
+
+  useEffect(() => {
+    if (authState.status !== "ready" || !isAuthenticated()) return
+
+    const intervalId = window.setInterval(() => {
+      void loadAppData(viewMode, {
+        silent: true,
+        includeCommon: shouldIncludeCommonData(viewMode, lastLoadedRoleRef.current),
+      })
+    }, AUTO_REFRESH_INTERVAL_MS)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return
+
+      void loadAppData(viewMode, {
+        silent: true,
+        includeCommon: shouldIncludeCommonData(viewMode, lastLoadedRoleRef.current),
+      })
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [authState.status, loadAppData, viewMode])
 
   useEffect(() => {
     setResources(collectResources(salons))
@@ -344,9 +427,13 @@ export default function TelegramCRMClient() {
       setScreen(next === "master" ? "dashboard" : "discovery")
       setSelectedMaster(null)
       setSelectedSalon(null)
+      void loadAppData(next, {
+        silent: true,
+        includeCommon: true,
+      })
       return next
     })
-  }, [])
+  }, [loadAppData])
 
   const handleBecomeMaster = useCallback(async () => {
     if (IS_DEV_AUTH_BYPASS) {
