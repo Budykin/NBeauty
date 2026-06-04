@@ -24,6 +24,8 @@ const statusLabel = {
   guest: "Незарегистрированный",
 } as const
 
+const PHONE_ALLOWED_PATTERN = /^\+?[0-9\s()-]+$/
+
 type NoteSaveStatus = "idle" | "dirty" | "saving" | "saved" | "error"
 
 export function MyClientsScreen() {
@@ -97,6 +99,10 @@ export function MyClientsScreen() {
 
   async function handleCreateGuest() {
     if (!draftName.trim()) return
+    if (!isValidTelephoneNumber(draftPhone)) {
+      setError("Укажи корректный номер телефона")
+      return
+    }
 
     try {
       setSavePending(true)
@@ -240,11 +246,11 @@ export function MyClientsScreen() {
       ) : null}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-h-[90svh] overflow-y-auto p-4">
+        <DialogContent className="max-h-[90svh] overflow-y-auto p-6">
           <DialogHeader className="text-center">
             <DialogTitle className="text-xl">Новый незарегистрированный клиент</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Имя" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
             <Input value={draftPhone} onChange={(event) => setDraftPhone(event.target.value)} placeholder="Телефон" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
             <Textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="Заметка мастера (необязательно)" rows={4} className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
@@ -359,6 +365,19 @@ function noteStatusText(status: NoteSaveStatus) {
   if (status === "saved") return "Сохранено"
   if (status === "error") return "Не сохранено"
   return ""
+}
+
+function isValidTelephoneNumber(value: string) {
+  const normalized = value.trim()
+  if (!normalized) return false
+
+  const digitsCount = normalized.replace(/\D/g, "").length
+  const hasValidChars = PHONE_ALLOWED_PATTERN.test(normalized)
+  const hasValidPlusPlacement =
+    normalized.indexOf("+") <= 0 &&
+    (normalized.match(/\+/g)?.length || 0) <= 1
+
+  return hasValidChars && hasValidPlusPlacement && digitsCount >= 5 && digitsCount <= 15
 }
 
 function formatTime(value: string) {

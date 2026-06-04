@@ -63,13 +63,34 @@ async function request<T>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new ApiError(res.status, error.detail || "Ошибка запроса")
+    throw new ApiError(res.status, formatApiErrorDetail(error.detail))
   }
 
   // 204 No Content
   if (res.status === 204) return undefined as T
 
   return res.json()
+}
+
+function formatApiErrorDetail(detail: unknown): string {
+  if (typeof detail === "string") return detail
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: unknown }).msg)
+        }
+        return null
+      })
+      .filter(Boolean)
+
+    if (messages.length > 0) {
+      return messages.join("\n")
+    }
+  }
+
+  return "Ошибка запроса"
 }
 
 export class ApiError extends Error {

@@ -50,15 +50,18 @@ class ClientDetailOut(BaseModel):
 
 class GuestClientCreate(BaseModel):
     full_name: str = Field(min_length=1, max_length=255, alias="fullName")
-    telephone_number: str | None = Field(default=None, alias="telephoneNumber")
+    telephone_number: str = Field(min_length=1, alias="telephoneNumber")
     note: str | None = Field(default=None, max_length=2000)
 
     model_config = ConfigDict(populate_by_name=True)
 
     @field_validator("telephone_number")
     @classmethod
-    def validate_telephone_number(cls, value: str | None) -> str | None:
-        return normalize_telephone_number(value)
+    def validate_telephone_number(cls, value: str) -> str:
+        normalized = normalize_telephone_number(value)
+        if normalized is None:
+            raise ValueError("Укажи корректный номер телефона")
+        return normalized
 
     @field_validator("note")
     @classmethod
