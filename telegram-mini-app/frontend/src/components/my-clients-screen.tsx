@@ -37,6 +37,7 @@ export function MyClientsScreen() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [draftName, setDraftName] = useState("")
   const [draftPhone, setDraftPhone] = useState("")
+  const [draftPhoneTouched, setDraftPhoneTouched] = useState(false)
   const [draftNote, setDraftNote] = useState("")
   const [savePending, setSavePending] = useState(false)
   const [noteDraft, setNoteDraft] = useState("")
@@ -44,6 +45,8 @@ export function MyClientsScreen() {
   const lastSavedNoteRef = useRef("")
   const deferredQuery = useDeferredValue(query)
   const selectedClientKey = selectedClient ? `${selectedClient.type}-${selectedClient.id}` : null
+  const draftPhoneError = getTelephoneNumberError(draftPhone)
+  const shouldShowDraftPhoneError = draftPhoneTouched && draftPhoneError !== null
 
   useEffect(() => {
     void loadClients()
@@ -99,8 +102,8 @@ export function MyClientsScreen() {
 
   async function handleCreateGuest() {
     if (!draftName.trim()) return
-    if (!isValidTelephoneNumber(draftPhone)) {
-      setError("Укажи корректный номер телефона")
+    setDraftPhoneTouched(true)
+    if (draftPhoneError) {
       return
     }
 
@@ -115,6 +118,7 @@ export function MyClientsScreen() {
       setIsAddOpen(false)
       setDraftName("")
       setDraftPhone("")
+      setDraftPhoneTouched(false)
       setDraftNote("")
       await loadClients()
       setSelectedClient(mapped)
@@ -245,19 +249,44 @@ export function MyClientsScreen() {
         </div>
       ) : null}
 
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+      <Dialog open={isAddOpen} onOpenChange={(open) => {
+        setIsAddOpen(open)
+        if (!open) {
+          setDraftPhoneTouched(false)
+        }
+      }}>
         <DialogContent className="max-h-[90svh] overflow-y-auto p-6">
           <DialogHeader className="text-center">
             <DialogTitle className="text-xl">Новый незарегистрированный клиент</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Имя" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
-            <Input value={draftPhone} onChange={(event) => setDraftPhone(event.target.value)} placeholder="Телефон" className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
-            <Textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="Заметка мастера (необязательно)" rows={4} className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
+            <div className="space-y-1.5">
+              <Input
+                value={draftPhone}
+                onBlur={() => setDraftPhoneTouched(true)}
+                onChange={(event) => {
+                  setDraftPhone(sanitizeTelephoneInput(event.target.value))
+                  setDraftPhoneTouched(true)
+                }}
+                placeholder="Телефон"
+                inputMode="tel"
+                aria-invalid={shouldShowDraftPhoneError}
+                className={`rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20 ${
+                  shouldShowDraftPhoneError
+                    ? "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20"
+                    : ""
+                }`}
+              />
+              {shouldShowDraftPhoneError ? (
+                <p className="px-1 text-xs text-destructive">{draftPhoneError}</p>
+              ) : null}
+            </div>
+            <Textarea value={draftNote} onChange={(event) => setDraftNote(event.target.value)} placeholder="Заметка (необязательно)" rows={4} className="rounded-xl border-border bg-background px-4 py-3 text-sm focus-visible:border-primary focus-visible:ring-primary/20" />
           </div>
           <DialogFooter className="sm:justify-end">
             <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={savePending}>Отмена</Button>
-            <Button onClick={() => void handleCreateGuest()} disabled={savePending || !draftName.trim()}>
+            <Button onClick={() => void handleCreateGuest()} disabled={savePending || !draftName.trim() || draftPhoneError !== null}>
               Сохранить
             </Button>
           </DialogFooter>
@@ -296,9 +325,8 @@ export function MyClientsScreen() {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                     <StickyNote className="h-4 w-4 text-primary" />
-                    Заметка мастера
+                    Заметка
                   </div>
-                  <p className="text-xs text-muted-foreground">{noteStatusText(noteSaveStatus)}</p>
                 </div>
                 <Textarea
                   value={noteDraft}
@@ -326,7 +354,7 @@ export function MyClientsScreen() {
                   </div>
                 ) : (
                   <div className="rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground">
-                    У этого клиента пока нет записей у мастера.
+                    У этого клиента пока нет записей.
                   </div>
                 )}
               </div>
@@ -359,17 +387,9 @@ function getInitials(value: string) {
   return initials || "КЛ"
 }
 
-function noteStatusText(status: NoteSaveStatus) {
-  if (status === "dirty") return "Есть изменения"
-  if (status === "saving") return "Сохраняем..."
-  if (status === "saved") return "Сохранено"
-  if (status === "error") return "Не сохранено"
-  return ""
-}
-
-function isValidTelephoneNumber(value: string) {
+function getTelephoneNumberError(value: string) {
   const normalized = value.trim()
-  if (!normalized) return false
+  if (!normalized) return "Укажи номер телефона"
 
   const digitsCount = normalized.replace(/\D/g, "").length
   const hasValidChars = PHONE_ALLOWED_PATTERN.test(normalized)
@@ -377,7 +397,28 @@ function isValidTelephoneNumber(value: string) {
     normalized.indexOf("+") <= 0 &&
     (normalized.match(/\+/g)?.length || 0) <= 1
 
-  return hasValidChars && hasValidPlusPlacement && digitsCount >= 5 && digitsCount <= 15
+  if (!hasValidChars || !hasValidPlusPlacement || digitsCount < 5 || digitsCount > 15) {
+    return "Укажи корректный номер телефона"
+  }
+
+  return null
+}
+
+function sanitizeTelephoneInput(value: string) {
+  let result = ""
+
+  for (const char of value) {
+    if (/\d/.test(char) || char === " " || char === "(" || char === ")" || char === "-") {
+      result += char
+      continue
+    }
+
+    if (char === "+" && result.length === 0 && !value.slice(0, value.indexOf(char)).includes("+")) {
+      result += char
+    }
+  }
+
+  return result
 }
 
 function formatTime(value: string) {
