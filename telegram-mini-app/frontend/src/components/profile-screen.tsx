@@ -291,7 +291,7 @@ export function ProfileScreen({
             </div>
             <div>
               <span className="text-sm font-medium text-card-foreground">Настройки</span>
-              <p className="text-xs text-muted-foreground">Профиль, фото и специальность</p>
+              <p className="text-xs text-muted-foreground">Профиль, телефон, фото и специальность</p>
             </div>
           </div>
           <ChevronRight className="h-4 w-4 text-muted-foreground" />

@@ -20,6 +20,7 @@ class AdminUserOut(BaseModel):
     tg_id: int = Field(alias="tgId")
     full_name: str = Field(alias="fullName")
     username: Optional[str] = None
+    telephone_number: Optional[str] = Field(default=None, alias="telephoneNumber")
     role: str
     rating: float
     created_at: datetime = Field(alias="createdAt")

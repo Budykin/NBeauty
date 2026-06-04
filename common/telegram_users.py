@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import User, UserRole
+from .phone_numbers import normalize_telephone_number
 
 
 async def upsert_telegram_user(
@@ -13,6 +14,7 @@ async def upsert_telegram_user(
     full_name: str,
     username: str | None,
     avatar: str | None = None,
+    telephone_number: str | None = None,
 ) -> User:
     """Создать или обновить пользователя Telegram.
 
@@ -31,12 +33,15 @@ async def upsert_telegram_user(
         if username_result.scalar_one_or_none():
             safe_username = None
 
+    normalized_telephone_number = normalize_telephone_number(telephone_number)
+
     if user is None:
         user = User(
             tg_id=tg_id,
             full_name=full_name or "Неизвестный пользователь",
             username=safe_username,
             avatar=avatar,
+            telephone_number=normalized_telephone_number,
             role=UserRole.CLIENT,
         )
         session.add(user)
@@ -51,6 +56,8 @@ async def upsert_telegram_user(
         user.username = safe_username
     if user.avatar is None and avatar is not None:
         user.avatar = avatar
+    if not user.telephone_number and normalized_telephone_number is not None:
+        user.telephone_number = normalized_telephone_number
 
     session.add(user)
     await session.flush()

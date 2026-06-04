@@ -72,6 +72,7 @@ class User(Base):
 
     avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     specialty: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    telephone_number: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     rating: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(

@@ -17,6 +17,7 @@ export const DEV_AUTH_RESPONSE: ApiAuthResponse = {
   userId: 101,
   fullName: "Ольга Козлова",
   username: "dev",
+  telephoneNumber: null,
   role: "client",
 }
 

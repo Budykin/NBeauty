@@ -117,6 +117,7 @@ export default function TelegramCRMClient() {
   const [currentUserName, setCurrentUserName] = useState("Мой аккаунт")
   const [currentUserSpecialty, setCurrentUserSpecialty] = useState<string | undefined>()
   const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>()
+  const [currentUserTelephoneNumber, setCurrentUserTelephoneNumber] = useState<string | undefined>()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [resources, setResources] = useState<Resource[]>([])
@@ -253,6 +254,7 @@ export default function TelegramCRMClient() {
       setCurrentUserName(isMasterAccount ? "Анна Петрова" : "Ольга Козлова")
       setCurrentUserSpecialty(isMasterAccount ? "Стилист-колорист" : undefined)
       setCurrentUserAvatar(undefined)
+      setCurrentUserTelephoneNumber(undefined)
       setScreen((current) => {
         if (PRESERVED_SCREENS.has(current)) {
           return current
@@ -290,6 +292,7 @@ export default function TelegramCRMClient() {
       setCurrentUserName(me.fullName)
       setCurrentUserSpecialty(me.specialty)
       setCurrentUserAvatar(me.avatar)
+      setCurrentUserTelephoneNumber(me.telephoneNumber ?? undefined)
       setRole(nextRole)
       setViewMode(nextViewMode)
       setScreen((current) => {
@@ -343,6 +346,7 @@ export default function TelegramCRMClient() {
     setRole(authState.auth.role)
     setViewMode(authState.auth.role)
     setScreen(authState.auth.role === "master" ? "dashboard" : "discovery")
+    setCurrentUserTelephoneNumber(authState.auth.telephoneNumber ?? undefined)
   }, [authState])
 
   useEffect(() => {
@@ -828,11 +832,13 @@ export default function TelegramCRMClient() {
                   currentName={currentUserName}
                   currentSpecialty={currentUserSpecialty}
                   currentAvatar={currentUserAvatar}
+                  currentTelephoneNumber={currentUserTelephoneNumber}
                   onBack={() => setScreen("profile")}
-                  onSave={(name, specialty, avatar) => {
+                  onSave={(name, specialty, avatar, telephoneNumber) => {
                     setCurrentUserName(name)
                     setCurrentUserSpecialty(specialty)
                     setCurrentUserAvatar(avatar)
+                    setCurrentUserTelephoneNumber(telephoneNumber)
                     setScreen("profile")
                   }}
                 />

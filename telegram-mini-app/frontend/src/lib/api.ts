@@ -93,6 +93,7 @@ export interface ApiUser {
   role: "client" | "master"
   avatar?: string
   specialty?: string
+  telephoneNumber?: string | null
   rating: number
   reviewCount: number
 }
@@ -181,6 +182,7 @@ export interface ApiAdminUser {
   tgId: number
   fullName: string
   username?: string
+  telephoneNumber?: string | null
   role: "client" | "master"
   rating: number
   createdAt: string
@@ -246,6 +248,7 @@ export interface ApiAuthResponse {
   fullName: string
   username?: string
   avatar?: string
+  telephoneNumber?: string | null
   role: "client" | "master"
 }
 
@@ -313,7 +316,7 @@ export const apiProfile = {
     return request<ApiUser>("/me")
   },
 
-  updateMe(data: { fullName?: string; specialty?: string; avatar?: string }) {
+  updateMe(data: { fullName?: string; specialty?: string; avatar?: string; telephoneNumber?: string | null }) {
     return request<ApiUser>("/me", {
       method: "PUT",
       body: JSON.stringify(data),

@@ -10,26 +10,32 @@ interface EditProfileProps {
   currentName: string
   currentSpecialty?: string
   currentAvatar?: string
+  currentTelephoneNumber?: string
   onBack: () => void
-  onSave: (name: string, specialty?: string, avatar?: string) => void
+  onSave: (name: string, specialty: string | undefined, avatar: string | undefined, telephoneNumber: string | undefined) => void
 }
+
+const PHONE_ALLOWED_PATTERN = /^\+?[0-9\s()-]+$/
 
 export function EditProfile({
   currentName,
   currentSpecialty,
   currentAvatar,
+  currentTelephoneNumber,
   onBack,
   onSave,
 }: EditProfileProps) {
   const [fullName, setFullName] = useState(currentName)
   const [specialty, setSpecialty] = useState(currentSpecialty || "")
   const [avatar, setAvatar] = useState<string | undefined>(currentAvatar)
+  const [telephoneNumber, setTelephoneNumber] = useState(currentTelephoneNumber || "")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasChanges =
     fullName.trim() !== currentName ||
     specialty.trim() !== (currentSpecialty || "") ||
-    avatar !== currentAvatar
+    avatar !== currentAvatar ||
+    telephoneNumber.trim() !== (currentTelephoneNumber || "")
 
   const initials = fullName
     .split(" ")
@@ -73,6 +79,20 @@ export function EditProfile({
       return
     }
 
+    const normalizedTelephoneNumber = telephoneNumber.trim()
+    if (normalizedTelephoneNumber) {
+      const digitsCount = normalizedTelephoneNumber.replace(/\D/g, "").length
+      const hasValidChars = PHONE_ALLOWED_PATTERN.test(normalizedTelephoneNumber)
+      const hasValidPlusPlacement =
+        normalizedTelephoneNumber.indexOf("+") <= 0 &&
+        (normalizedTelephoneNumber.match(/\+/g)?.length || 0) <= 1
+
+      if (!hasValidChars || !hasValidPlusPlacement || digitsCount < 5 || digitsCount > 15) {
+        setError("Укажи корректный номер телефона")
+        return
+      }
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -81,9 +101,10 @@ export function EditProfile({
         fullName: fullName.trim(),
         specialty: specialty.trim() || undefined,
         avatar,
+        telephoneNumber: normalizedTelephoneNumber || null,
       })
 
-      onSave(fullName.trim(), specialty.trim() || undefined, avatar)
+      onSave(fullName.trim(), specialty.trim() || undefined, avatar, normalizedTelephoneNumber || undefined)
     } catch (err) {
       console.error("Update profile failed:", err)
       setError("Не удалось обновить профиль. Попробуй ещё раз.")
@@ -194,6 +215,24 @@ export function EditProfile({
               isLoading && "opacity-50 cursor-not-allowed",
             )}
           />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="telephone-number" className="text-sm font-medium text-foreground">Телефон</label>
+          <input
+            id="telephone-number"
+            type="tel"
+            value={telephoneNumber}
+            onChange={(e) => setTelephoneNumber(e.target.value)}
+            disabled={isLoading}
+            placeholder="+7 (999) 123-45-67"
+            className={cn(
+              "rounded-lg border border-border bg-card px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors",
+              "focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20",
+              isLoading && "opacity-50 cursor-not-allowed",
+            )}
+          />
+          <p className="text-xs text-muted-foreground">Разрешены `+`, цифры, пробелы, скобки и дефисы</p>
         </div>
       </div>
 

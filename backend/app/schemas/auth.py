@@ -17,6 +17,7 @@ class AuthResponse(BaseModel):
     full_name: str = Field(serialization_alias="fullName")
     username: str | None = None
     avatar: str | None = None
+    telephone_number: str | None = Field(default=None, serialization_alias="telephoneNumber")
     role: UserRole
 
     model_config = ConfigDict(populate_by_name=True)

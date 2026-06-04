@@ -1,7 +1,10 @@
 from __future__ import annotations
 from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+from pydantic import field_validator
 from datetime import datetime
+
+from common.phone_numbers import normalize_telephone_number
 
 
 # ============================================================================
@@ -16,6 +19,7 @@ class MeOut(BaseModel):
     role: str
     avatar: Optional[str] = None
     specialty: Optional[str] = None
+    telephone_number: Optional[str] = Field(default=None, serialization_alias="telephoneNumber")
     rating: float
     review_count: int = Field(default=0, serialization_alias="reviewCount")
 
@@ -27,8 +31,14 @@ class MeUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, alias="fullName")
     specialty: Optional[str] = None
     avatar: Optional[str] = None
+    telephone_number: Optional[str] = Field(default=None, alias="telephoneNumber")
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("telephone_number")
+    @classmethod
+    def validate_telephone_number(cls, value: Optional[str]) -> Optional[str]:
+        return normalize_telephone_number(value)
 
 
 class BecomeMasterOut(BaseModel):
