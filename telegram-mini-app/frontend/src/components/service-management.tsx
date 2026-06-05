@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Plus, Trash2, Scissors, Box, Info, Loader2, X } from "lucide-react"
 import {
@@ -28,11 +28,23 @@ interface ServiceManagementProps {
 }
 
 export function ServiceManagement({ services, resources, onUpdate }: ServiceManagementProps) {
+  const [localServices, setLocalServices] = useState<Service[]>(services)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const isDraftId = (id: string) => id.startsWith("draft-service-")
+
+  useEffect(() => {
+    const hasDraft = localServices.some((service) => isDraftId(service.id))
+    const hasPendingEdit = editingId !== null || loading !== null
+
+    if (hasDraft || hasPendingEdit) {
+      return
+    }
+
+    setLocalServices(services)
+  }, [editingId, loading, localServices, services])
 
   async function handleAdd() {
     if (IS_DEV_AUTH_BYPASS) {
@@ -42,7 +54,9 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
         price: 0,
         duration: 30,
       }
-      onUpdate([...services, newService])
+      const nextServices = [...localServices, newService]
+      setLocalServices(nextServices)
+      onUpdate(nextServices)
       setEditingId(newService.id)
       return
     }
@@ -54,17 +68,21 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
       duration: 30,
       resourceId: undefined,
     }
-    onUpdate([...services, draft])
+    const nextServices = [...localServices, draft]
+    setLocalServices(nextServices)
+    onUpdate(nextServices)
     setEditingId(draft.id)
   }
 
   async function handleUpdate(id: string, field: keyof Service, value: string | number | undefined) {
-    const service = services.find((s) => s.id === id)
+    const service = localServices.find((s) => s.id === id)
     if (!service) return
 
     // Для черновика ничего не отправляем на сервер, пока не нажали "Готово"
     if (isDraftId(id) || IS_DEV_AUTH_BYPASS) {
-      onUpdate(services.map((s) => (s.id === id ? { ...s, [field]: value } : s)))
+      const nextServices = localServices.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+      setLocalServices(nextServices)
+      onUpdate(nextServices)
       return
     }
 
@@ -75,9 +93,9 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
     if (field === "resourceId") apiData.resourceId = value ? Number(value) : null
 
     // Сначала обновляем локально (оптимистично)
-    onUpdate(
-      services.map((s) => (s.id === id ? { ...s, [field]: value } : s))
-    )
+    const nextServices = localServices.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    setLocalServices(nextServices)
+    onUpdate(nextServices)
 
     // Потом отправляем на сервер
     try {
@@ -93,7 +111,7 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
   }
 
   async function handleCreateFromDraft(id: string) {
-    const draft = services.find((s) => s.id === id)
+    const draft = localServices.find((s) => s.id === id)
     if (!draft) return
 
     const name = (draft.name || "").trim()
@@ -124,7 +142,9 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
         resourceId: created.resourceId ? String(created.resourceId) : undefined,
       }
 
-      onUpdate(services.map((s) => (s.id === id ? newService : s)))
+      const nextServices = localServices.map((s) => (s.id === id ? newService : s))
+      setLocalServices(nextServices)
+      onUpdate(nextServices)
       setEditingId(null)
     } catch (err) {
       console.error("Create service failed:", err)
@@ -140,14 +160,18 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
 
   async function handleDeleteConfirmed(id: string) {
     if (IS_DEV_AUTH_BYPASS) {
-      onUpdate(services.filter((s) => s.id !== id))
+      const nextServices = localServices.filter((s) => s.id !== id)
+      setLocalServices(nextServices)
+      onUpdate(nextServices)
       return
     }
 
     setLoading(`delete-${id}`)
     try {
       await apiServices.delete(Number(id))
-      onUpdate(services.filter((s) => s.id !== id))
+      const nextServices = localServices.filter((s) => s.id !== id)
+      setLocalServices(nextServices)
+      onUpdate(nextServices)
     } catch (err) {
       console.error("Delete service failed:", err)
       toast({
@@ -165,11 +189,11 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-foreground">Услуги</h1>
-          <p className="text-sm text-muted-foreground">{services.length} услуг</p>
+          <p className="text-sm text-muted-foreground">{localServices.length} услуг</p>
         </div>
         <button
           onClick={handleAdd}
-          disabled={loading === "add" || Boolean(services.find((s) => isDraftId(s.id)))}
+          disabled={loading === "add" || Boolean(localServices.find((s) => isDraftId(s.id)))}
           className="flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition-all active:scale-95 disabled:opacity-50"
         >
           {loading === "add" ? (
@@ -182,7 +206,7 @@ export function ServiceManagement({ services, resources, onUpdate }: ServiceMana
       </div>
 
       <div className="flex flex-col gap-2.5">
-        {services.map((service, i) => (
+        {localServices.map((service, i) => (
           <motion.div
             key={service.id}
             initial={{ opacity: 0, y: 10 }}
